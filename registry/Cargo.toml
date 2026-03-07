@@ -1,12 +1,15 @@
 [package]
-name = "vigil-core"
+name = "vigil-registry"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+vigil-core.workspace = true
+vigil-runner-shell.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+libsql.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

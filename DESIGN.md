@@ -48,17 +48,14 @@ trait Runner {
 }
 ```
 
-### Schedulable
+### Runnable
 
-The dyn boundary for heterogeneous task collections. The scheduler and storage layers work with `Box<dyn Schedulable>` so they don't need to know about specific runner types.
+The dyn boundary for heterogeneous task dispatch. A `ConfiguredRunner` pairs a concrete `Task` with its `Runner` behind `Box<dyn Runnable>`, erasing the concrete types. Lives in `vigil-registry`.
 
 ```rust
 #[async_trait]
-trait Schedulable: Send + Sync {
-    fn task_id(&self) -> Uuid;
-    fn task_name(&self) -> &str;
+trait Runnable: Send + Sync {
     fn runner_type(&self) -> &'static str;
-    fn trigger(&self) -> Option<&TriggerSpec>;
     async fn run(&self, context: &RunContext) -> Result<RunOutput>;
 }
 ```
@@ -132,7 +129,9 @@ Each axis gets its own crate, which:
 - Keeps platform-specific code (`cfg`) at crate boundaries
 - Makes the extension points obvious from the dependency graph
 
-Deserialization of heterogeneous tasks uses a match-based registry at the CLI boundary. Can evolve to `inventory` crate auto-registration later.
+The `vigil-registry` crate is the composition root shared by all binaries (CLI, daemon, etc.). It owns the `Store` (persistence), the runner type registry (match-based deserialization), and the `Runnable`/`ConfiguredRunner` dyn glue. Can evolve to `inventory` crate auto-registration later.
+
+The `Store` currently uses libSQL directly, but the registry's role as intermediary means we could swap in a different storage backend (e.g., flat files, remote API) without touching core or any runner crate.
 
 ## Storage
 
@@ -195,8 +194,9 @@ vigil/
 ├── Cargo.toml              # workspace
 ├── DESIGN.md               # this document
 ├── PLAN.md                 # build phases and progress
-├── core/                   # vigil-core: traits, models, storage
-├── cli/                    # vigil-cli: clap, wiring, registry
+├── core/                   # vigil-core: traits and models (no I/O deps)
+├── registry/               # vigil-registry: store, runner dispatch, dyn glue
+├── cli/                    # vigil-cli: clap, user-facing commands
 ├── runner-claude/          # vigil-runner-claude
 ├── runner-shell/           # vigil-runner-shell
 ├── scheduler-launchd/      # vigil-scheduler-launchd (macOS)

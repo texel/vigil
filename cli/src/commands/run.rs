@@ -2,10 +2,10 @@ use anyhow::{bail, Result};
 use chrono::Utc;
 use std::collections::HashMap;
 use uuid::Uuid;
-use vigil_core::db::Store;
 use vigil_core::models::{Run, RunContext, RunStatus, TriggerType};
+use vigil_registry::Store;
 
-use crate::{logs_dir, registry};
+use crate::logs_dir;
 
 pub async fn handle(name: &str, store: &Store) -> Result<()> {
     let scheduled = store
@@ -17,7 +17,8 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
         bail!("task '{name}' is disabled");
     }
 
-    let runnable = registry::deserialize_task(&scheduled.task.runner_type, &scheduled.task.json)?;
+    let runnable =
+        vigil_registry::deserialize_task(&scheduled.task.runner_type, &scheduled.task.json)?;
 
     let run_id = Uuid::new_v4();
     let log_dir = logs_dir().join(&scheduled.name);

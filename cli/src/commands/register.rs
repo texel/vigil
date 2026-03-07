@@ -3,8 +3,8 @@ use anyhow::{bail, Context, Result};
 use chrono::Utc;
 use std::path::PathBuf;
 use uuid::Uuid;
-use vigil_core::db::Store;
 use vigil_core::models::{RawTask, ScheduledTask};
+use vigil_registry::Store;
 use vigil_runner_shell::ShellTask;
 
 pub async fn handle(executor: RegisterExecutor, store: &Store) -> Result<()> {

@@ -2077,7 +2077,6 @@ name = "vigil-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "clap",
  "dirs",
@@ -2087,6 +2086,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "vigil-core",
+ "vigil-registry",
  "vigil-runner-shell",
 ]
 
@@ -2097,12 +2097,24 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "vigil-registry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
  "libsql",
  "serde",
  "serde_json",
- "tokio",
- "tracing",
  "uuid",
+ "vigil-core",
+ "vigil-runner-shell",
 ]
 
 [[package]]

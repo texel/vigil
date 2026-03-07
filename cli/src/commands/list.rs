@@ -1,5 +1,5 @@
 use anyhow::Result;
-use vigil_core::db::Store;
+use vigil_registry::Store;
 
 pub async fn handle(store: &Store) -> Result<()> {
     let tasks = store.list_tasks().await?;

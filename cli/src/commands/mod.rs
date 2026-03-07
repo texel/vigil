@@ -5,7 +5,7 @@ mod unregister;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use vigil_core::db::Store;
+use vigil_registry::Store;
 
 #[derive(Parser)]
 #[command(name = "vigil", about = "Task scheduler for Claude Code and beyond")]

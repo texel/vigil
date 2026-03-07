@@ -30,8 +30,12 @@ Validates the architecture end-to-end with the simplest possible executor.
 - [x] Replace `SELECT *` with explicit column lists
 - [x] `Weekday` -> `DayOfWeek`
 - [x] DB column `executor_type` -> `runner_type`
+- [x] Extract `vigil-registry` crate (Store + Runnable + ConfiguredRunner + deserialize_task)
+- [x] Strip core of DB/libsql dependency — core is now pure traits and models
+- [x] Remove speculative `Schedulable` trait (unused)
+- [x] Rename `executor-shell/` directory -> `runner-shell/`, crate `vigil-executor-shell` -> `vigil-runner-shell`
 
-## Phase 2: Claude executor
+## Phase 2: Claude runner
 
 - [ ] `runner-claude/` — ClaudeTask, ClaudeRunner, session capture
 - [ ] `cli/` additions — register claude, claude resume, top-level resume

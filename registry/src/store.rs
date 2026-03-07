@@ -1,4 +1,4 @@
-use crate::models::{RawTask, Run, ScheduledTask};
+use vigil_core::models::{RawTask, Run, ScheduledTask};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use libsql::{params, Connection, Database};

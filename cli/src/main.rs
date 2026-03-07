@@ -1,11 +1,10 @@
 mod commands;
-mod registry;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use commands::Cli;
 use std::path::PathBuf;
-use vigil_core::db::Store;
+use vigil_registry::Store;
 
 fn vigil_dir() -> PathBuf {
     dirs_path().join(".vigil")
