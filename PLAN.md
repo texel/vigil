@@ -8,10 +8,10 @@
 
 Validates the architecture end-to-end with the simplest possible executor.
 
-- [ ] `core/` — Task<C>, ExecutorConfig, Executor, Schedulable traits, Run model, TriggerSpec types, libSQL storage
-- [ ] `executor-shell/` — ShellConfig, ShellExecutor
-- [ ] `cli/` — register shell, run, list, unregister
-- [ ] Workspace Cargo.toml
+- [x] `core/` — Task<C>, ExecutorConfig, Executor, Schedulable traits, Run model, TriggerSpec types, libSQL storage
+- [x] `executor-shell/` — ShellConfig, ShellExecutor
+- [x] `cli/` — register shell, run, list, unregister
+- [x] Workspace Cargo.toml
 
 **End state:** `vigil register shell hello "echo hello world"` -> `vigil run hello` -> `vigil list` works.
 

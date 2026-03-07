@@ -1,0 +1,145 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use uuid::Uuid;
+
+/// The unit of work. Generic over its executor config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Task<C> {
+    pub id: Uuid,
+    pub name: String,
+    pub config: C,
+    pub trigger: Option<TriggerSpec>,
+    pub working_directory: Option<PathBuf>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Canonical scheduling representation, compiled to platform-specific formats by scheduler backends.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TriggerSpec {
+    Recurring {
+        times: Vec<TimeOfDay>,
+        days: Option<DayFilter>,
+        timezone: Option<String>,
+    },
+    Interval {
+        every: std::time::Duration,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct TimeOfDay {
+    pub hour: u8,
+    pub minute: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DayFilter {
+    Weekdays,
+    Weekends,
+    Days(Vec<Weekday>),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum Weekday {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday,
+}
+
+/// Tracks a single execution of a task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Run {
+    pub id: Uuid,
+    pub task_id: Uuid,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub exit_code: Option<i32>,
+    pub status: RunStatus,
+    pub metadata: HashMap<String, serde_json::Value>,
+    pub log_path: PathBuf,
+    pub triggered_by: TriggerType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RunStatus {
+    Running,
+    Succeeded,
+    Failed,
+    TimedOut,
+}
+
+impl std::fmt::Display for RunStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunStatus::Running => write!(f, "running"),
+            RunStatus::Succeeded => write!(f, "succeeded"),
+            RunStatus::Failed => write!(f, "failed"),
+            RunStatus::TimedOut => write!(f, "timed_out"),
+        }
+    }
+}
+
+impl std::str::FromStr for RunStatus {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "running" => Ok(RunStatus::Running),
+            "succeeded" => Ok(RunStatus::Succeeded),
+            "failed" => Ok(RunStatus::Failed),
+            "timed_out" => Ok(RunStatus::TimedOut),
+            _ => Err(anyhow::anyhow!("unknown run status: {s}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerType {
+    Manual,
+    Schedule,
+}
+
+impl std::fmt::Display for TriggerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TriggerType::Manual => write!(f, "manual"),
+            TriggerType::Schedule => write!(f, "schedule"),
+        }
+    }
+}
+
+impl std::str::FromStr for TriggerType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "manual" => Ok(TriggerType::Manual),
+            "schedule" => Ok(TriggerType::Schedule),
+            _ => Err(anyhow::anyhow!("unknown trigger type: {s}")),
+        }
+    }
+}
+
+/// Context provided to an executor when running a task.
+#[derive(Debug, Clone)]
+pub struct RunContext {
+    pub run_id: Uuid,
+    pub working_directory: PathBuf,
+    pub log_path: PathBuf,
+}
+
+/// Output returned by an executor after running a task.
+#[derive(Debug, Clone)]
+pub struct RunOutput {
+    pub exit_code: i32,
+    pub status: RunStatus,
+    pub metadata: HashMap<String, serde_json::Value>,
+}
