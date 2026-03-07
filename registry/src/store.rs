@@ -203,6 +203,40 @@ impl Store {
         Ok(results)
     }
 
+    pub async fn get_run_by_id(&self, id: Uuid) -> Result<Option<Run>> {
+        let conn = self.conn().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, task_id, started_at, completed_at, exit_code, status, metadata_json, log_path, triggered_by
+                 FROM runs WHERE id = ?1",
+                params![id.to_string()],
+            )
+            .await
+            .context("failed to query run")?;
+
+        match rows.next().await? {
+            Some(row) => Ok(Some(run_from_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn get_task_by_id(&self, id: Uuid) -> Result<Option<ScheduledTask<RawTask>>> {
+        let conn = self.conn().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, name, runner_type, config_json, trigger_json, working_directory, enabled, created_at, updated_at
+                 FROM tasks WHERE id = ?1",
+                params![id.to_string()],
+            )
+            .await
+            .context("failed to query task")?;
+
+        match rows.next().await? {
+            Some(row) => Ok(Some(scheduled_task_from_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
     pub async fn get_runs_for_task(&self, task_id: Uuid, limit: u32) -> Result<Vec<Run>> {
         let conn = self.conn().await?;
         let mut rows = conn

@@ -11,6 +11,7 @@ path = "src/main.rs"
 vigil-core.workspace = true
 vigil-registry.workspace = true
 vigil-runner-shell.workspace = true
+vigil-runner-claude.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 clap = { version = "4", features = ["derive"] }

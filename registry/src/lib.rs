@@ -7,6 +7,7 @@ pub use store::Store;
 use anyhow::{Result, bail};
 use vigil_core::models::{RunContext, RunOutput};
 use vigil_core::runner::{Runner, Task};
+use vigil_runner_claude::{ClaudeRunner, ClaudeTask};
 use vigil_runner_shell::{ShellRunner, ShellTask};
 
 /// Deserialize a task config from JSON given the runner type discriminant,
@@ -18,6 +19,13 @@ pub fn deserialize_task(runner_type: &str, json: &str) -> Result<Box<dyn Runnabl
             Ok(Box::new(RunnableTask {
                 task,
                 runner: ShellRunner,
+            }))
+        }
+        "claude" => {
+            let task: ClaudeTask = serde_json::from_str(json)?;
+            Ok(Box::new(RunnableTask {
+                task,
+                runner: ClaudeRunner,
             }))
         }
         _ => bail!("unknown runner type: {runner_type}"),
@@ -58,6 +66,19 @@ mod tests {
     fn deserialize_shell_task() {
         let runnable = deserialize_task("shell", r#"{"command":"echo hi"}"#).unwrap();
         assert_eq!(runnable.runner_type(), "shell");
+    }
+
+    #[test]
+    fn deserialize_claude_task_with_skill() {
+        let runnable = deserialize_task("claude", r#"{"skill":"/daily-briefing"}"#).unwrap();
+        assert_eq!(runnable.runner_type(), "claude");
+    }
+
+    #[test]
+    fn deserialize_claude_task_with_prompt() {
+        let runnable =
+            deserialize_task("claude", r#"{"prompt":"summarize recent git activity"}"#).unwrap();
+        assert_eq!(runnable.runner_type(), "claude");
     }
 
     #[test]

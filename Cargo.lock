@@ -2125,6 +2125,7 @@ dependencies = [
  "uuid",
  "vigil-core",
  "vigil-registry",
+ "vigil-runner-claude",
  "vigil-runner-shell",
 ]
 
@@ -2154,7 +2155,21 @@ dependencies = [
  "tokio",
  "uuid",
  "vigil-core",
+ "vigil-runner-claude",
  "vigil-runner-shell",
+]
+
+[[package]]
+name = "vigil-runner-claude"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "vigil-core",
 ]
 
 [[package]]

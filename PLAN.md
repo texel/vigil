@@ -36,7 +36,7 @@ Validates the architecture end-to-end with the simplest possible executor.
 - [x] Rename `executor-shell/` directory -> `runner-shell/`, crate `vigil-executor-shell` -> `vigil-runner-shell`
 
 ## Phase 2: List runs
-- [ ] Add a command to list past runs with metadata (start time, end time, status, exit code). 
+- [x] Add a command to list past runs with metadata (start time, end time, status, exit code). 
 
 ## Phase 3: Claude runner
 

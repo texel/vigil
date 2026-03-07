@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 vigil-core.workspace = true
 vigil-runner-shell.workspace = true
+vigil-runner-claude.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true

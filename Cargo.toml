@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "runner-shell", "registry", "cli"]
+members = ["core", "runner-shell", "runner-claude", "registry", "cli"]
 resolver = "3"
 
 [workspace.package]
@@ -9,6 +9,7 @@ edition = "2024"
 [workspace.dependencies]
 vigil-core = { path = "core" }
 vigil-runner-shell = { path = "runner-shell" }
+vigil-runner-claude = { path = "runner-claude" }
 vigil-registry = { path = "registry" }
 anyhow = "1"
 async-trait = "0.1"
