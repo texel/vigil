@@ -281,3 +281,140 @@ fn run_from_row(row: &libsql::Row) -> Result<Run> {
         triggered_by: triggered_by.parse()?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vigil_core::models::{RunStatus, TriggerType};
+
+    async fn test_store() -> (Store, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let store = Store::open(&db_path).await.unwrap();
+        (store, dir)
+    }
+
+    fn make_task(name: &str) -> ScheduledTask<RawTask> {
+        ScheduledTask {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            task: RawTask {
+                runner_type: "shell".to_string(),
+                json: r#"{"command":"echo test"}"#.to_string(),
+            },
+            trigger: None,
+            working_directory: None,
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_run(task_id: Uuid) -> Run {
+        Run {
+            id: Uuid::new_v4(),
+            task_id,
+            started_at: Utc::now(),
+            completed_at: None,
+            exit_code: None,
+            status: RunStatus::Running,
+            metadata: HashMap::new(),
+            log_path: PathBuf::from("/tmp/test.log"),
+            triggered_by: TriggerType::Manual,
+        }
+    }
+
+    #[tokio::test]
+    async fn insert_and_get_task() {
+        let (store, _dir) = test_store().await;
+        let task = make_task("hello");
+        store.insert_task(&task).await.unwrap();
+
+        let fetched = store.get_task_by_name("hello").await.unwrap().unwrap();
+        assert_eq!(fetched.name, "hello");
+        assert_eq!(fetched.task.runner_type, "shell");
+    }
+
+    #[tokio::test]
+    async fn list_tasks() {
+        let (store, _dir) = test_store().await;
+        store.insert_task(&make_task("bravo")).await.unwrap();
+        store.insert_task(&make_task("alpha")).await.unwrap();
+
+        let tasks = store.list_tasks().await.unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].name, "alpha");
+        assert_eq!(tasks[1].name, "bravo");
+    }
+
+    #[tokio::test]
+    async fn delete_task_cascades_runs() {
+        let (store, _dir) = test_store().await;
+        let task = make_task("doomed");
+        store.insert_task(&task).await.unwrap();
+        store.insert_run(&make_run(task.id)).await.unwrap();
+
+        store.delete_task(task.id).await.unwrap();
+        assert!(store.get_task_by_name("doomed").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn insert_and_get_runs() {
+        let (store, _dir) = test_store().await;
+        let task = make_task("runner");
+        store.insert_task(&task).await.unwrap();
+        let run = make_run(task.id);
+        store.insert_run(&run).await.unwrap();
+
+        let runs = store.get_runs_for_task(task.id, 10).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, RunStatus::Running);
+    }
+
+    #[tokio::test]
+    async fn list_recent_runs_filters_by_name() {
+        let (store, _dir) = test_store().await;
+        let t1 = make_task("task-a");
+        let t2 = make_task("task-b");
+        store.insert_task(&t1).await.unwrap();
+        store.insert_task(&t2).await.unwrap();
+        store.insert_run(&make_run(t1.id)).await.unwrap();
+        store.insert_run(&make_run(t2.id)).await.unwrap();
+
+        let runs = store.list_recent_runs(Some("task-a"), 10).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].1, "task-a");
+    }
+
+    #[tokio::test]
+    async fn list_recent_runs_respects_limit() {
+        let (store, _dir) = test_store().await;
+        let task = make_task("many-runs");
+        store.insert_task(&task).await.unwrap();
+        for _ in 0..3 {
+            store.insert_run(&make_run(task.id)).await.unwrap();
+        }
+
+        let runs = store.list_recent_runs(None, 2).await.unwrap();
+        assert_eq!(runs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn update_run() {
+        let (store, _dir) = test_store().await;
+        let task = make_task("updatable");
+        store.insert_task(&task).await.unwrap();
+        let mut run = make_run(task.id);
+        store.insert_run(&run).await.unwrap();
+
+        run.completed_at = Some(Utc::now());
+        run.status = RunStatus::Succeeded;
+        run.exit_code = Some(0);
+        store.update_run(&run).await.unwrap();
+
+        let runs = store.get_runs_for_task(task.id, 10).await.unwrap();
+        assert_eq!(runs[0].status, RunStatus::Succeeded);
+        assert_eq!(runs[0].exit_code, Some(0));
+        assert!(runs[0].completed_at.is_some());
+    }
+}

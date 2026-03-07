@@ -153,3 +153,37 @@ pub struct RunOutput {
     pub status: RunStatus,
     pub metadata: HashMap<String, serde_json::Value>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn run_status_display_parse_roundtrip() {
+        for status in [
+            RunStatus::Running,
+            RunStatus::Succeeded,
+            RunStatus::Failed,
+            RunStatus::TimedOut,
+        ] {
+            let s = status.to_string();
+            let parsed: RunStatus = s.parse().unwrap();
+            assert_eq!(parsed, status);
+        }
+    }
+
+    #[test]
+    fn trigger_type_display_parse_roundtrip() {
+        for trigger in [TriggerType::Manual, TriggerType::Schedule] {
+            let s = trigger.to_string();
+            let parsed: TriggerType = s.parse().unwrap();
+            assert_eq!(parsed, trigger);
+        }
+    }
+
+    #[test]
+    fn run_status_from_str_invalid_returns_error() {
+        assert!(RunStatus::from_str("bogus").is_err());
+    }
+}

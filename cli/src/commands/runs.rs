@@ -65,3 +65,30 @@ fn format_duration(dur: chrono::TimeDelta) -> String {
         format!("{:.0}h {:.0}m", hours, mins)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeDelta;
+
+    #[test]
+    fn test_format_duration_seconds() {
+        assert_eq!(format_duration(TimeDelta::milliseconds(500)), "0.5s");
+        assert_eq!(format_duration(TimeDelta::milliseconds(5000)), "5.0s");
+    }
+
+    #[test]
+    fn test_format_duration_minutes() {
+        assert_eq!(format_duration(TimeDelta::milliseconds(150_000)), "2m 30s");
+    }
+
+    #[test]
+    fn test_format_duration_hours() {
+        assert_eq!(format_duration(TimeDelta::milliseconds(4_500_000)), "1h 15m");
+    }
+
+    #[test]
+    fn test_format_duration_zero() {
+        assert_eq!(format_duration(TimeDelta::milliseconds(0)), "0.0s");
+    }
+}

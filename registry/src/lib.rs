@@ -1,3 +1,5 @@
+//! vigil-registry — composition root: task deserialization, store, and dyn dispatch.
+
 mod store;
 
 pub use store::Store;
@@ -45,5 +47,26 @@ impl<T: Task, R: Runner<Task = T>> Runnable for RunnableTask<T, R> {
 
     async fn run(&self, context: &RunContext) -> Result<RunOutput> {
         self.runner.run(&self.task, context).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_shell_task() {
+        let runnable = deserialize_task("shell", r#"{"command":"echo hi"}"#).unwrap();
+        assert_eq!(runnable.runner_type(), "shell");
+    }
+
+    #[test]
+    fn deserialize_unknown_runner_returns_error() {
+        assert!(deserialize_task("unknown", "{}").is_err());
+    }
+
+    #[test]
+    fn deserialize_invalid_json_returns_error() {
+        assert!(deserialize_task("shell", "not json").is_err());
     }
 }
