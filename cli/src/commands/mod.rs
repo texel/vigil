@@ -1,5 +1,6 @@
 mod register;
 mod run;
+mod runs;
 mod list;
 mod unregister;
 
@@ -33,6 +34,14 @@ pub enum Command {
         /// Task name
         name: String,
     },
+    /// Show recent task runs
+    Runs {
+        /// Filter by task name
+        name: Option<String>,
+        /// Max runs to show
+        #[arg(short, long, default_value = "20")]
+        limit: u32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -55,5 +64,6 @@ pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
         Command::Run { name } => run::handle(&name, &store).await,
         Command::List => list::handle(&store).await,
         Command::Unregister { name } => unregister::handle(&name, &store).await,
+        Command::Runs { name, limit } => runs::handle(name.as_deref(), limit, &store).await,
     }
 }

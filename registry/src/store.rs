@@ -177,6 +177,32 @@ impl Store {
         Ok(())
     }
 
+    pub async fn list_recent_runs(&self, task_name: Option<&str>, limit: u32) -> Result<Vec<(Run, String)>> {
+        let conn = self.conn().await?;
+        let mut rows = match task_name {
+            Some(name) => conn.query(
+                "SELECT r.id, r.task_id, r.started_at, r.completed_at, r.exit_code, r.status, r.metadata_json, r.log_path, r.triggered_by, t.name
+                 FROM runs r JOIN tasks t ON r.task_id = t.id
+                 WHERE t.name = ?1
+                 ORDER BY r.started_at DESC LIMIT ?2",
+                params![name, limit],
+            ).await,
+            None => conn.query(
+                "SELECT r.id, r.task_id, r.started_at, r.completed_at, r.exit_code, r.status, r.metadata_json, r.log_path, r.triggered_by, t.name
+                 FROM runs r JOIN tasks t ON r.task_id = t.id
+                 ORDER BY r.started_at DESC LIMIT ?1",
+                params![limit],
+            ).await,
+        }.context("failed to query runs")?;
+        let mut results = Vec::new();
+        while let Some(row) = rows.next().await? {
+            let run = run_from_row(&row)?;
+            let name: String = row.get(9)?;
+            results.push((run, name));
+        }
+        Ok(results)
+    }
+
     pub async fn get_runs_for_task(&self, task_id: Uuid, limit: u32) -> Result<Vec<Run>> {
         let conn = self.conn().await?;
         let mut rows = conn

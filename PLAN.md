@@ -35,14 +35,17 @@ Validates the architecture end-to-end with the simplest possible executor.
 - [x] Remove speculative `Schedulable` trait (unused)
 - [x] Rename `executor-shell/` directory -> `runner-shell/`, crate `vigil-executor-shell` -> `vigil-runner-shell`
 
-## Phase 2: Claude runner
+## Phase 2: List runs
+- [ ] Add a command to list past runs with metadata (start time, end time, status, exit code). 
+
+## Phase 3: Claude runner
 
 - [ ] `runner-claude/` — ClaudeTask, ClaudeRunner, session capture
 - [ ] `cli/` additions — register claude, claude resume, top-level resume
 
 **End state:** register a Claude skill, run it, resume a failed session.
 
-## Phase 3: Scheduling
+## Phase 4: Scheduling
 
 - [ ] `core/` additions — Scheduler trait, TriggerSpec parsing
 - [ ] `scheduler-launchd/` — launchd backend (macOS)
@@ -50,7 +53,7 @@ Validates the architecture end-to-end with the simplest possible executor.
 
 **End state:** `vigil schedule daily-briefing "weekdays at 9:00"` wires up recurring execution.
 
-## Phase 4: Polish
+## Phase 5: Polish
 
 - [ ] logs command
 - [ ] Notifications on failure
