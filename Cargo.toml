@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "executor-shell", "cli"]
+members = ["core", "runner-shell", "cli"]
 resolver = "3"
 
 [workspace.package]
@@ -8,11 +8,11 @@ edition = "2024"
 
 [workspace.dependencies]
 vigil-core = { path = "core" }
-vigil-executor-shell = { path = "executor-shell" }
+vigil-runner-shell = { path = "runner-shell" }
 anyhow = "1"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
-libsql = "0.6"
+libsql = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

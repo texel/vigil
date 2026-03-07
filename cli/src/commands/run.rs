@@ -8,22 +8,22 @@ use vigil_core::models::{Run, RunContext, RunStatus, TriggerType};
 use crate::{logs_dir, registry};
 
 pub async fn handle(name: &str, store: &Store) -> Result<()> {
-    let task_row = store
+    let scheduled = store
         .get_task_by_name(name)
         .await?
         .ok_or_else(|| anyhow::anyhow!("task '{name}' not found"))?;
 
-    if !task_row.enabled {
+    if !scheduled.enabled {
         bail!("task '{name}' is disabled");
     }
 
-    let executor = registry::deserialize_config(&task_row.executor_type, &task_row.config_json)?;
+    let runnable = registry::deserialize_task(&scheduled.task.runner_type, &scheduled.task.json)?;
 
     let run_id = Uuid::new_v4();
-    let log_dir = logs_dir().join(&task_row.name);
+    let log_dir = logs_dir().join(&scheduled.name);
     let log_path = log_dir.join(format!("{}.json", Utc::now().format("%Y-%m-%d_%H-%M-%S")));
 
-    let working_directory = task_row
+    let working_directory = scheduled
         .working_directory
         .clone()
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
@@ -36,7 +36,7 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
 
     let mut run = Run {
         id: run_id,
-        task_id: task_row.id,
+        task_id: scheduled.id,
         started_at: Utc::now(),
         completed_at: None,
         exit_code: None,
@@ -49,7 +49,7 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
     store.insert_run(&run).await?;
 
     println!("Running task '{name}'...");
-    let result = executor.execute(&context).await;
+    let result = runnable.run(&context).await;
 
     match result {
         Ok(output) => {
@@ -60,8 +60,13 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
             store.update_run(&run).await?;
 
             match run.status {
-                RunStatus::Succeeded => println!("Task '{name}' succeeded (exit code {})", output.exit_code),
-                _ => println!("Task '{name}' finished with status: {} (exit code {})", run.status, output.exit_code),
+                RunStatus::Succeeded => {
+                    println!("Task '{name}' succeeded (exit code {})", output.exit_code)
+                }
+                _ => println!(
+                    "Task '{name}' finished with status: {} (exit code {})",
+                    run.status, output.exit_code
+                ),
             }
         }
         Err(e) => {

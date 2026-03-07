@@ -1,36 +1,36 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use vigil_core::executor::{Executor, ExecutorConfig};
 use vigil_core::models::{RunContext, RunOutput, RunStatus};
+use vigil_core::runner::{Runner, Task};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShellConfig {
+pub struct ShellTask {
     pub command: String,
 }
 
-impl ExecutorConfig for ShellConfig {
-    fn executor_type(&self) -> &'static str {
+impl Task for ShellTask {
+    fn runner_type(&self) -> &'static str {
         "shell"
     }
 }
 
-pub struct ShellExecutor;
+pub struct ShellRunner;
 
 #[async_trait]
-impl Executor for ShellExecutor {
-    type Config = ShellConfig;
+impl Runner for ShellRunner {
+    type Task = ShellTask;
 
-    async fn execute(&self, config: &ShellConfig, context: &RunContext) -> Result<RunOutput> {
+    async fn run(&self, task: &ShellTask, context: &RunContext) -> Result<RunOutput> {
         tracing::info!(
             run_id = %context.run_id,
-            command = %config.command,
+            command = %task.command,
             "executing shell command"
         );
 
         let output = tokio::process::Command::new("sh")
             .arg("-c")
-            .arg(&config.command)
+            .arg(&task.command)
             .current_dir(&context.working_directory)
             .output()
             .await
@@ -39,7 +39,6 @@ impl Executor for ShellExecutor {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
-        // Write output to log file
         let log_content = serde_json::json!({
             "stdout": stdout,
             "stderr": stderr,

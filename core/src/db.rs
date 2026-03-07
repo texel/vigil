@@ -1,4 +1,4 @@
-use crate::models::Run;
+use crate::models::{RawTask, Run, ScheduledTask};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use libsql::{params, Connection, Database};
@@ -6,28 +6,15 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// Raw task row from the database, before executor-specific deserialization.
-#[derive(Debug, Clone)]
-pub struct TaskRow {
-    pub id: Uuid,
-    pub name: String,
-    pub executor_type: String,
-    pub config_json: String,
-    pub trigger_json: Option<String>,
-    pub working_directory: Option<PathBuf>,
-    pub enabled: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 pub struct Store {
     db: Database,
 }
 
 impl Store {
     pub async fn open(path: &Path) -> Result<Self> {
-        #[allow(deprecated)]
-        let db = Database::open(path.to_string_lossy().as_ref())
+        let db = libsql::Builder::new_local(path)
+            .build()
+            .await
             .context("failed to open database")?;
         let store = Self { db };
         store.migrate().await?;
@@ -44,7 +31,7 @@ impl Store {
             "CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
-                executor_type TEXT NOT NULL,
+                runner_type TEXT NOT NULL,
                 config_json TEXT NOT NULL,
                 trigger_json TEXT,
                 working_directory TEXT,
@@ -70,21 +57,21 @@ impl Store {
         Ok(())
     }
 
-    pub async fn insert_task(&self, row: &TaskRow) -> Result<()> {
+    pub async fn insert_task(&self, task: &ScheduledTask<RawTask>) -> Result<()> {
         let conn = self.conn().await?;
         conn.execute(
-            "INSERT INTO tasks (id, name, executor_type, config_json, trigger_json, working_directory, enabled, created_at, updated_at)
+            "INSERT INTO tasks (id, name, runner_type, config_json, trigger_json, working_directory, enabled, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                row.id.to_string(),
-                row.name.clone(),
-                row.executor_type.clone(),
-                row.config_json.clone(),
-                row.trigger_json.clone(),
-                row.working_directory.as_ref().map(|p| p.to_string_lossy().to_string()),
-                row.enabled as i32,
-                row.created_at.to_rfc3339(),
-                row.updated_at.to_rfc3339(),
+                task.id.to_string(),
+                task.name.clone(),
+                task.task.runner_type.clone(),
+                task.task.json.clone(),
+                task.trigger.as_ref().map(|t| serde_json::to_string(t).unwrap()),
+                task.working_directory.as_ref().map(|p| p.to_string_lossy().to_string()),
+                task.enabled as i32,
+                task.created_at.to_rfc3339(),
+                task.updated_at.to_rfc3339(),
             ],
         )
         .await
@@ -92,29 +79,37 @@ impl Store {
         Ok(())
     }
 
-    pub async fn get_task_by_name(&self, name: &str) -> Result<Option<TaskRow>> {
+    pub async fn get_task_by_name(&self, name: &str) -> Result<Option<ScheduledTask<RawTask>>> {
         let conn = self.conn().await?;
         let mut rows = conn
-            .query("SELECT * FROM tasks WHERE name = ?1", params![name])
+            .query(
+                "SELECT id, name, runner_type, config_json, trigger_json, working_directory, enabled, created_at, updated_at
+                 FROM tasks WHERE name = ?1",
+                params![name],
+            )
             .await
             .context("failed to query task")?;
 
         match rows.next().await? {
-            Some(row) => Ok(Some(task_row_from_libsql(&row)?)),
+            Some(row) => Ok(Some(scheduled_task_from_row(&row)?)),
             None => Ok(None),
         }
     }
 
-    pub async fn list_tasks(&self) -> Result<Vec<TaskRow>> {
+    pub async fn list_tasks(&self) -> Result<Vec<ScheduledTask<RawTask>>> {
         let conn = self.conn().await?;
         let mut rows = conn
-            .query("SELECT * FROM tasks ORDER BY name", params![])
+            .query(
+                "SELECT id, name, runner_type, config_json, trigger_json, working_directory, enabled, created_at, updated_at
+                 FROM tasks ORDER BY name",
+                params![],
+            )
             .await
             .context("failed to list tasks")?;
 
         let mut tasks = Vec::new();
         while let Some(row) = rows.next().await? {
-            tasks.push(task_row_from_libsql(&row)?);
+            tasks.push(scheduled_task_from_row(&row)?);
         }
         Ok(tasks)
     }
@@ -186,7 +181,8 @@ impl Store {
         let conn = self.conn().await?;
         let mut rows = conn
             .query(
-                "SELECT * FROM runs WHERE task_id = ?1 ORDER BY started_at DESC LIMIT ?2",
+                "SELECT id, task_id, started_at, completed_at, exit_code, status, metadata_json, log_path, triggered_by
+                 FROM runs WHERE task_id = ?1 ORDER BY started_at DESC LIMIT ?2",
                 params![task_id.to_string(), limit],
             )
             .await
@@ -194,16 +190,16 @@ impl Store {
 
         let mut runs = Vec::new();
         while let Some(row) = rows.next().await? {
-            runs.push(run_from_libsql(&row)?);
+            runs.push(run_from_row(&row)?);
         }
         Ok(runs)
     }
 }
 
-fn task_row_from_libsql(row: &libsql::Row) -> Result<TaskRow> {
+fn scheduled_task_from_row(row: &libsql::Row) -> Result<ScheduledTask<RawTask>> {
     let id: String = row.get(0)?;
     let name: String = row.get(1)?;
-    let executor_type: String = row.get(2)?;
+    let runner_type: String = row.get(2)?;
     let config_json: String = row.get(3)?;
     let trigger_json: Option<String> = row.get(4)?;
     let working_directory: Option<String> = row.get(5)?;
@@ -211,12 +207,17 @@ fn task_row_from_libsql(row: &libsql::Row) -> Result<TaskRow> {
     let created_at: String = row.get(7)?;
     let updated_at: String = row.get(8)?;
 
-    Ok(TaskRow {
+    Ok(ScheduledTask {
         id: id.parse().context("invalid task id")?,
         name,
-        executor_type,
-        config_json,
-        trigger_json,
+        task: RawTask {
+            runner_type,
+            json: config_json,
+        },
+        trigger: trigger_json
+            .map(|j| serde_json::from_str(&j))
+            .transpose()
+            .context("invalid trigger JSON")?,
         working_directory: working_directory.map(PathBuf::from),
         enabled: enabled != 0,
         created_at: DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc),
@@ -224,7 +225,7 @@ fn task_row_from_libsql(row: &libsql::Row) -> Result<TaskRow> {
     })
 }
 
-fn run_from_libsql(row: &libsql::Row) -> Result<Run> {
+fn run_from_row(row: &libsql::Row) -> Result<Run> {
     let id: String = row.get(0)?;
     let task_id: String = row.get(1)?;
     let started_at: String = row.get(2)?;

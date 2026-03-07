@@ -1,5 +1,5 @@
 [package]
-name = "vigil-executor-shell"
+name = "vigil-runner-shell"
 version.workspace = true
 edition.workspace = true
 

@@ -9,15 +9,31 @@
 Validates the architecture end-to-end with the simplest possible executor.
 
 - [x] `core/` — Task<C>, ExecutorConfig, Executor, Schedulable traits, Run model, TriggerSpec types, libSQL storage
-- [x] `executor-shell/` — ShellConfig, ShellExecutor
+- [x] `runner-shell/` — ShellTask, ShellRunner
 - [x] `cli/` — register shell, run, list, unregister
 - [x] Workspace Cargo.toml
 
 **End state:** `vigil register shell hello "echo hello world"` -> `vigil run hello` -> `vigil list` works.
 
+## Phase 1.1: Fixups
+
+- [x] Bump `libsql` from 0.6 to 0.9
+- [x] Switch `core/src/db.rs` from deprecated `Database::open()` to `Builder::new_local().build().await?`
+- [x] `ExecutorConfig` trait -> `Task` trait (`ShellTask`, `ClaudeTask`)
+- [x] `Executor` trait -> `Runner` trait, `.execute()` -> `.run()`
+- [x] `Task<C>` struct -> `ScheduledTask<T>` (task + scheduling metadata)
+- [x] `TaskRow` -> eliminated. DB layer returns `ScheduledTask<RawTask>`
+- [x] `DynWrapper` -> `ConfiguredRunner` (runner bound to its task)
+- [x] `ExecutorConfigDyn` trait -> `Runnable` trait
+- [x] `executor_type()` -> `runner_type()` throughout
+- [x] Rename `core/src/executor.rs` -> `core/src/runner.rs`
+- [x] Replace `SELECT *` with explicit column lists
+- [x] `Weekday` -> `DayOfWeek`
+- [x] DB column `executor_type` -> `runner_type`
+
 ## Phase 2: Claude executor
 
-- [ ] `executor-claude/` — ClaudeConfig, ClaudeExecutor, session capture
+- [ ] `runner-claude/` — ClaudeTask, ClaudeRunner, session capture
 - [ ] `cli/` additions — register claude, claude resume, top-level resume
 
 **End state:** register a Claude skill, run it, resume a failed session.

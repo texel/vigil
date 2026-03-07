@@ -4,17 +4,27 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-/// The unit of work. Generic over its executor config.
+/// A task config paired with scheduling metadata. Generic over the task config type.
+/// At the DB boundary, `T = RawTask` (untyped JSON). After deserialization, `T` is a concrete
+/// task type like `ShellTask` or `ClaudeTask`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Task<C> {
+pub struct ScheduledTask<T> {
     pub id: Uuid,
     pub name: String,
-    pub config: C,
+    pub task: T,
     pub trigger: Option<TriggerSpec>,
     pub working_directory: Option<PathBuf>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Untyped task data as stored in the database. The CLI registry is responsible
+/// for deserializing `json` into a concrete task type based on `runner_type`.
+#[derive(Debug, Clone)]
+pub struct RawTask {
+    pub runner_type: String,
+    pub json: String,
 }
 
 /// Canonical scheduling representation, compiled to platform-specific formats by scheduler backends.
@@ -40,11 +50,11 @@ pub struct TimeOfDay {
 pub enum DayFilter {
     Weekdays,
     Weekends,
-    Days(Vec<Weekday>),
+    Days(Vec<DayOfWeek>),
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum Weekday {
+pub enum DayOfWeek {
     Monday,
     Tuesday,
     Wednesday,
@@ -128,7 +138,7 @@ impl std::str::FromStr for TriggerType {
     }
 }
 
-/// Context provided to an executor when running a task.
+/// Context provided to a runner when executing a task.
 #[derive(Debug, Clone)]
 pub struct RunContext {
     pub run_id: Uuid,
@@ -136,7 +146,7 @@ pub struct RunContext {
     pub log_path: PathBuf,
 }
 
-/// Output returned by an executor after running a task.
+/// Output returned by a runner after executing a task.
 #[derive(Debug, Clone)]
 pub struct RunOutput {
     pub exit_code: i32,

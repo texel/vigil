@@ -6,58 +6,62 @@ Claude Code skills (daily-briefing, weekly-review, pr-review, etc.) need to run 
 
 Vigil is a Rust CLI that orchestrates scheduled task runs, tracks their state, and provides an escape hatch for human intervention when things go wrong.
 
-Though initially focused on Claude Code, Vigil's architecture cleanly separates execution logic from scheduling and persistence. Executors and schedulers are independent extension axes — adding a new executor (Claude, shell, HTTP) or a new scheduler backend (launchd, cron, daemon) doesn't require changes to the other.
+Though initially focused on Claude Code, Vigil's architecture cleanly separates execution logic from scheduling and persistence. Executors and schedulers are independent extension axes — adding a new runner (Claude, shell, HTTP) or a new scheduler backend (launchd, cron, daemon) doesn't require changes to the other.
 
 ## Core Abstractions
 
-### Task
+### ScheduledTask
 
-The unit of work. Generic over its executor config — `Task<C>` where `C: ExecutorConfig`.
+A task config paired with scheduling metadata. Generic over its task config type — `ScheduledTask<T>`. At the DB boundary, `T = RawTask` (untyped JSON). After deserialization, `T` is a concrete task type like `ShellTask` or `ClaudeTask`.
 
 ```rust
-struct Task<C: ExecutorConfig> {
+struct ScheduledTask<T> {
     id: Uuid,
     name: String,
-    config: C,
+    task: T,
     trigger: Option<TriggerSpec>,
     working_directory: Option<PathBuf>,
     enabled: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
+
+struct RawTask {
+    runner_type: String,
+    json: String,
+}
 ```
 
-### ExecutorConfig and Executor
+### Task and Runner
 
-Config and behavior are separated. `ExecutorConfig` is pure serializable data. `Executor` is stateless behavior that operates on a config.
+Config and behavior are separated. `Task` is pure serializable data describing what to run. `Runner` is stateless behavior that executes a task.
 
 ```rust
-trait ExecutorConfig: Send + Sync + Serialize + DeserializeOwned + Debug {
-    fn executor_type(&self) -> &'static str;
+trait Task: Send + Sync + Serialize + DeserializeOwned + Debug {
+    fn runner_type(&self) -> &'static str;
 }
 
 #[async_trait]
-trait Executor {
-    type Config: ExecutorConfig;
-    async fn execute(&self, config: &Self::Config, context: &RunContext) -> Result<RunOutput>;
+trait Runner {
+    type Task: Task;
+    async fn run(&self, task: &Self::Task, context: &RunContext) -> Result<RunOutput>;
 }
 ```
 
 ### Schedulable
 
-The dyn boundary for heterogeneous task collections. The scheduler and storage layers work with `Box<dyn Schedulable>` so they don't need to know about specific executor types.
+The dyn boundary for heterogeneous task collections. The scheduler and storage layers work with `Box<dyn Schedulable>` so they don't need to know about specific runner types.
 
 ```rust
 #[async_trait]
 trait Schedulable: Send + Sync {
     fn task_id(&self) -> Uuid;
     fn task_name(&self) -> &str;
+    fn runner_type(&self) -> &'static str;
     fn trigger(&self) -> Option<&TriggerSpec>;
-    async fn execute(&self, context: &RunContext) -> Result<RunOutput>;
+    async fn run(&self, context: &RunContext) -> Result<RunOutput>;
 }
 ```
-
-`Task<C>` implements `Schedulable` automatically for any `C: ExecutorConfig`.
 
 ### TriggerSpec
 
@@ -90,7 +94,7 @@ struct Run {
     completed_at: Option<DateTime<Utc>>,
     exit_code: Option<i32>,
     status: RunStatus,
-    metadata_json: Option<String>,  // executor-specific (e.g., session_id for Claude)
+    metadata_json: Option<String>,  // runner-specific (e.g., session_id for Claude)
     log_path: PathBuf,
     triggered_by: TriggerType,      // Manual, Schedule
 }
@@ -118,10 +122,10 @@ Planned implementations:
 
 Two independent axes:
 
-- **Executors** (what to run): shell, Claude, future HTTP/webhook, etc.
+- **Runners** (what to run): shell, Claude, future HTTP/webhook, etc.
 - **Schedulers** (when to trigger): launchd, cron, daemon, future systemd, etc.
 
-These are m+n, not m*n. A Claude executor doesn't know about launchd, and a launchd scheduler doesn't know about Claude. Both depend only on `vigil-core` traits.
+These are m+n, not m*n. A Claude runner doesn't know about launchd, and a launchd scheduler doesn't know about Claude. Both depend only on `vigil-core` traits.
 
 Each axis gets its own crate, which:
 - Prevents accidental dependency leakage
@@ -143,7 +147,7 @@ Run log output stored as plain files at `~/.vigil/logs/<task-name>/<date>.json`.
 
 ## CLI Structure
 
-Generic commands where executor is a subcommand:
+Generic commands where runner is a subcommand:
 
 ```
 vigil register claude <name> <skill-path> [--budget] [--allowed-tools]
@@ -157,13 +161,13 @@ vigil unschedule <name>
 vigil unregister <name>
 ```
 
-Executor-specific namespaces for capabilities unique to that executor:
+Runner-specific namespaces for capabilities unique to that runner:
 
 ```
 vigil claude resume <run-id>
 ```
 
-Top-level convenience aliases that dispatch by looking up the executor type:
+Top-level convenience aliases that dispatch by looking up the runner type:
 
 ```
 vigil resume <run-id>
@@ -174,14 +178,14 @@ vigil resume <run-id>
 1. `vigil run <name>` (or triggered by scheduler):
    - Load task from DB
    - Create Run record (status: Running)
-   - Dispatch to the task's executor
+   - Dispatch to the task's runner
    - Capture output to log file
    - On completion: update Run with exit code, status, completed_at
-   - On failure: send notification with run ID for easy resume (if executor supports it)
+   - On failure: send notification with run ID for easy resume (if runner supports it)
 
-2. `vigil resume <run-id>` (executor-specific, e.g. Claude):
-   - Look up Run record, get executor-specific metadata (session_id)
-   - Dispatch to executor's resume logic
+2. `vigil resume <run-id>` (runner-specific, e.g. Claude):
+   - Look up Run record, get runner-specific metadata (session_id)
+   - Dispatch to runner's resume logic
    - User is now in an interactive session with full prior context
 
 ## Project Structure
@@ -193,8 +197,8 @@ vigil/
 ├── PLAN.md                 # build phases and progress
 ├── core/                   # vigil-core: traits, models, storage
 ├── cli/                    # vigil-cli: clap, wiring, registry
-├── executor-claude/        # vigil-executor-claude
-├── executor-shell/         # vigil-executor-shell
+├── runner-claude/          # vigil-runner-claude
+├── runner-shell/           # vigil-runner-shell
 ├── scheduler-launchd/      # vigil-scheduler-launchd (macOS)
 ├── scheduler-cron/         # vigil-scheduler-cron (Linux)
 └── scheduler-daemon/       # vigil-scheduler-daemon (portable)

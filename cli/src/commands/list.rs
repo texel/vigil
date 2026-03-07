@@ -9,7 +9,10 @@ pub async fn handle(store: &Store) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<20} {:<10} {:<8} {}", "NAME", "EXECUTOR", "ENABLED", "WORKING DIR");
+    println!(
+        "{:<20} {:<10} {:<8} {}",
+        "NAME", "RUNNER", "ENABLED", "WORKING DIR"
+    );
     println!("{}", "-".repeat(70));
 
     for task in &tasks {
@@ -19,7 +22,10 @@ pub async fn handle(store: &Store) -> Result<()> {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "-".to_string());
         let enabled = if task.enabled { "yes" } else { "no" };
-        println!("{:<20} {:<10} {:<8} {}", task.name, task.executor_type, enabled, dir);
+        println!(
+            "{:<20} {:<10} {:<8} {}",
+            task.name, task.task.runner_type, enabled, dir
+        );
     }
 
     println!("\n{} task(s)", tasks.len());

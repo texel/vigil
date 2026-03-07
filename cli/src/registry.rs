@@ -1,46 +1,43 @@
 use anyhow::{bail, Result};
-use vigil_core::executor::ExecutorConfig;
 use vigil_core::models::{RunContext, RunOutput};
-use vigil_executor_shell::{ShellConfig, ShellExecutor};
-use vigil_core::executor::Executor;
+use vigil_core::runner::{Runner, Task};
+use vigil_runner_shell::{ShellRunner, ShellTask};
 
-/// Deserialize an executor config from JSON given the executor type discriminant.
-pub fn deserialize_config(
-    executor_type: &str,
-    json: &str,
-) -> Result<Box<dyn ExecutorConfigDyn>> {
-    match executor_type {
+/// Deserialize a task config from JSON given the runner type discriminant,
+/// and pair it with the appropriate runner.
+pub fn deserialize_task(runner_type: &str, json: &str) -> Result<Box<dyn Runnable>> {
+    match runner_type {
         "shell" => {
-            let config: ShellConfig = serde_json::from_str(json)?;
-            Ok(Box::new(DynWrapper {
-                config,
-                executor: ShellExecutor,
+            let task: ShellTask = serde_json::from_str(json)?;
+            Ok(Box::new(ConfiguredRunner {
+                task,
+                runner: ShellRunner,
             }))
         }
-        _ => bail!("unknown executor type: {executor_type}"),
+        _ => bail!("unknown runner type: {runner_type}"),
     }
 }
 
-/// Object-safe wrapper that pairs a config with its executor.
+/// Object-safe wrapper that pairs a task config with its runner.
 /// This is the dyn boundary — used at the CLI layer for dispatch.
 #[async_trait::async_trait]
-pub trait ExecutorConfigDyn: Send + Sync {
-    fn executor_type(&self) -> &'static str;
-    async fn execute(&self, context: &RunContext) -> Result<RunOutput>;
+pub trait Runnable: Send + Sync {
+    fn runner_type(&self) -> &'static str;
+    async fn run(&self, context: &RunContext) -> Result<RunOutput>;
 }
 
-struct DynWrapper<C: ExecutorConfig, E: Executor<Config = C>> {
-    config: C,
-    executor: E,
+struct ConfiguredRunner<T: Task, R: Runner<Task = T>> {
+    task: T,
+    runner: R,
 }
 
 #[async_trait::async_trait]
-impl<C: ExecutorConfig, E: Executor<Config = C>> ExecutorConfigDyn for DynWrapper<C, E> {
-    fn executor_type(&self) -> &'static str {
-        self.config.executor_type()
+impl<T: Task, R: Runner<Task = T>> Runnable for ConfiguredRunner<T, R> {
+    fn runner_type(&self) -> &'static str {
+        self.task.runner_type()
     }
 
-    async fn execute(&self, context: &RunContext) -> Result<RunOutput> {
-        self.executor.execute(&self.config, context).await
+    async fn run(&self, context: &RunContext) -> Result<RunOutput> {
+        self.runner.run(&self.task, context).await
     }
 }
