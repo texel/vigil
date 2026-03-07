@@ -10,7 +10,7 @@ pub async fn handle(store: &Store) -> Result<()> {
     }
 
     println!(
-        "{:<20} {:<10} {:<8} {}",
+        "{:<20} {:<10} {:<8} {:#}",
         "NAME", "RUNNER", "ENABLED", "WORKING DIR"
     );
     println!("{}", "-".repeat(70));
