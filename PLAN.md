@@ -40,16 +40,16 @@ Validates the architecture end-to-end with the simplest possible executor.
 
 ## Phase 3: Claude runner
 
-- [ ] `runner-claude/` — ClaudeTask, ClaudeRunner, session capture
-- [ ] `cli/` additions — register claude, claude resume, top-level resume
+- [x] `runner-claude/` — ClaudeTask, ClaudeRunner, session capture
+- [x] `cli/` additions — register claude, claude resume, top-level resume
 
 **End state:** register a Claude skill, run it, resume a failed session.
 
 ## Phase 4: Scheduling
 
-- [ ] `core/` additions — Scheduler trait, TriggerSpec parsing
-- [ ] `scheduler-launchd/` — launchd backend (macOS)
-- [ ] `cli/` additions — schedule, unschedule, status
+- [x] `core/` additions — Scheduler trait, TriggerSpec parsing
+- [x] `scheduler-launchd/` — launchd backend (macOS)
+- [x] `cli/` additions — schedule, unschedule, status
 
 **End state:** `vigil schedule daily-briefing "weekdays at 9:00"` wires up recurring execution.
 
