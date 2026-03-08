@@ -52,7 +52,7 @@ fn build_calendar_intervals(
     let weekdays: Option<Vec<u8>> = days.map(|d| match d {
         DayFilter::Weekdays => vec![1, 2, 3, 4, 5],
         DayFilter::Weekends => vec![0, 6],
-        DayFilter::Days(days) => days.iter().map(|d| launchd_weekday(d)).collect(),
+        DayFilter::Days(days) => days.iter().map(launchd_weekday).collect(),
     });
 
     let mut intervals = Vec::new();
