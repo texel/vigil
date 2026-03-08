@@ -1,4 +1,9 @@
-//! vigil-runner-claude — Claude Code executor for vigil.
+//! Claude Code runner for vigil.
+//!
+//! This crate implements a Runner that can execute tasks using the `claude` CLI
+//! tool. It supports both skill-based and prompt-based tasks, captures
+//! streaming JSON output, and extracts metadata for integration with the vigil
+//! system.
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -10,6 +15,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 use vigil_core::models::{RunContext, RunEvent, RunOutput, RunStatus};
 use vigil_core::runner::{Runner, Task};
+
+const RUNNER_TYPE: &str = "claude";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Display)]
 #[display(rename_all = "camelCase")]
@@ -44,7 +51,7 @@ pub struct ClaudeTask {
 
 impl Task for ClaudeTask {
     fn runner_type(&self) -> &'static str {
-        "claude"
+        RUNNER_TYPE
     }
 }
 

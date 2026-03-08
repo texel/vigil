@@ -1,4 +1,8 @@
-use anyhow::{Result, bail, Context};
+//! A scheduler implementation for macOS using launchd. This allows Vigil to run
+//! tasks in the background without needing a persistent process, and integrates
+//! with the system's native scheduling capabilities.
+
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -139,8 +143,7 @@ impl LaunchdScheduler {
 #[async_trait]
 impl Scheduler for LaunchdScheduler {
     async fn register(&self, name: &str, trigger: &TriggerSpec) -> Result<()> {
-        let plist_content =
-            generate_plist(name, trigger, &self.vigil_bin.to_string_lossy())?;
+        let plist_content = generate_plist(name, trigger, &self.vigil_bin.to_string_lossy())?;
         let plist_path = self.plist_path(name);
         let domain = self.gui_domain();
 
@@ -234,7 +237,10 @@ mod tests {
     #[test]
     fn plist_recurring_daily() {
         let trigger = TriggerSpec::Recurring {
-            times: vec![TimeOfDay { hour: 8, minute: 30 }],
+            times: vec![TimeOfDay {
+                hour: 8,
+                minute: 30,
+            }],
             days: None,
             timezone: None,
         };

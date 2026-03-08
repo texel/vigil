@@ -1,4 +1,10 @@
-//! vigil-runner-shell — shell command executor for vigil.
+//! shell command runner for vigil.
+//!
+//! This crate implements a Runner that executes shell commands. It defines a
+//! ShellTask struct that contains the command to run, and a ShellRunner that
+//! implements the Runner trait. The runner executes the command in a
+//! subprocess, captures its output, and sends it back as RunEvents. It also
+//! writes a log file with the command's stdout, stderr, and exit code.
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -9,6 +15,8 @@ use tokio::sync::mpsc;
 use vigil_core::models::{RunContext, RunEvent, RunOutput, RunStatus};
 use vigil_core::runner::{Runner, Task};
 
+const RUNNER_TYPE: &str = "shell";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellTask {
     pub command: String,
@@ -16,7 +24,7 @@ pub struct ShellTask {
 
 impl Task for ShellTask {
     fn runner_type(&self) -> &'static str {
-        "shell"
+        RUNNER_TYPE
     }
 }
 
@@ -80,9 +88,12 @@ impl Runner for ShellRunner {
         if let Some(parent) = context.log_path.parent() {
             tokio::fs::create_dir_all(parent).await.ok();
         }
-        tokio::fs::write(&context.log_path, serde_json::to_string_pretty(&log_content)?)
-            .await
-            .context("failed to write log file")?;
+        tokio::fs::write(
+            &context.log_path,
+            serde_json::to_string_pretty(&log_content)?,
+        )
+        .await
+        .context("failed to write log file")?;
 
         let exit_code = output.status.code().unwrap_or(-1);
         let status = if output.status.success() {

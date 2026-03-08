@@ -1,4 +1,10 @@
-//! vigil-registry — composition root: task deserialization, store, and dyn dispatch.
+//! A registry for runnable tasks, stored in a local database.
+//!
+//! The registry provides a `Store` abstraction for managing tasks and their
+//! runs, and a `Runnable` trait for executing tasks in a runner-agnostic way.
+//! Tasks are stored in a database (currently SQLite) with metadata, and can be
+//! retrieved and executed by ID. The registry also supports deserializing tasks
+//! from JSON configurations, allowing for flexible task definitions.
 
 mod store;
 
@@ -34,7 +40,7 @@ pub fn deserialize_task(runner_type: &str, json: &str) -> Result<Box<dyn Runnabl
 }
 
 /// Dyn-safe wrapper for runnable tasks.
-/// This is the dyn boundary used by composition roots (CLI, daemon, etc.) for dispatch,
+/// This allows programs (CLI, daemon, etc.) to dispatch tasks,
 /// and allows heterogeneous tasks to be handled in the same collection.
 #[async_trait::async_trait]
 pub trait Runnable: Send + Sync {
