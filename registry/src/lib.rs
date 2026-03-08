@@ -11,8 +11,9 @@ mod store;
 pub use store::Store;
 
 use anyhow::{Result, bail};
+use std::collections::HashMap;
 use tokio::sync::mpsc;
-use vigil_core::models::{RunContext, RunEvent, RunOutput};
+use vigil_core::models::{EventDisplay, RunContext, RunEvent, RunOutput, RunSummary};
 use vigil_core::runner::{Runner, Task};
 use vigil_runner_claude::{ClaudeRunner, ClaudeTask};
 use vigil_runner_shell::{ShellRunner, ShellTask};
@@ -47,6 +48,8 @@ pub trait Runnable: Send + Sync {
     fn runner_type(&self) -> &'static str;
     fn preview(&self, context: &RunContext) -> Result<String>;
     async fn run(&self, context: &RunContext, tx: mpsc::Sender<RunEvent>) -> Result<RunOutput>;
+    fn summarize_run(&self, metadata: &HashMap<String, serde_json::Value>) -> RunSummary;
+    fn format_event(&self, event: &RunEvent) -> Option<EventDisplay>;
 }
 
 /// Composes a Task with its Runner.
@@ -67,6 +70,14 @@ impl<T: Task, R: Runner<Task = T>> Runnable for RunnableTask<T, R> {
 
     async fn run(&self, context: &RunContext, tx: mpsc::Sender<RunEvent>) -> Result<RunOutput> {
         self.runner.run(&self.task, context, tx).await
+    }
+
+    fn summarize_run(&self, metadata: &HashMap<String, serde_json::Value>) -> RunSummary {
+        self.runner.summarize_run(metadata)
+    }
+
+    fn format_event(&self, event: &RunEvent) -> Option<EventDisplay> {
+        self.runner.format_event(event)
     }
 }
 

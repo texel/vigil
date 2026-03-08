@@ -259,6 +259,22 @@ pub enum RunEvent {
     Progress(String),
 }
 
+/// Structured summary of a completed run, for display by any consumer.
+#[derive(Debug, Clone, Default)]
+pub struct RunSummary {
+    /// The main result text (markdown for claude, plain text for shell)
+    pub result: Option<String>,
+    /// Runner-specific key-value fields to display (e.g. "Tokens" -> "12,340 in / 3,210 out")
+    pub fields: Vec<(String, String)>,
+}
+
+/// A filtered/transformed streaming event for display.
+#[derive(Debug, Clone)]
+pub struct EventDisplay {
+    /// The text to show (e.g. "> Using tool: Read" or a plain output line)
+    pub text: String,
+}
+
 /// Context provided to a runner when executing a task.
 #[derive(Debug, Clone)]
 pub struct RunContext {

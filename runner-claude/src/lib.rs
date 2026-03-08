@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
-use vigil_core::models::{RunContext, RunEvent, RunOutput, RunStatus};
+use vigil_core::models::{EventDisplay, RunContext, RunEvent, RunOutput, RunStatus, RunSummary};
 use vigil_core::runner::{Runner, Task};
 
 const RUNNER_TYPE: &str = "claude";
@@ -233,5 +233,64 @@ impl Runner for ClaudeRunner {
             status,
             metadata,
         })
+    }
+
+    fn summarize_run(&self, metadata: &HashMap<String, serde_json::Value>) -> RunSummary {
+        let result = metadata
+            .get("result")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        let mut fields = Vec::new();
+
+        if let Some(usage) = metadata.get("usage") {
+            let input = usage.get("input_tokens").and_then(|v| v.as_u64());
+            let output = usage.get("output_tokens").and_then(|v| v.as_u64());
+            if let (Some(i), Some(o)) = (input, output) {
+                fields.push(("Tokens".to_string(), format!("{i} in / {o} out")));
+            }
+        }
+
+        if let Some(session_id) = metadata.get("session_id").and_then(|v| v.as_str()) {
+            fields.push(("Session".to_string(), session_id.to_string()));
+        }
+
+        RunSummary { result, fields }
+    }
+
+    fn format_event(&self, event: &RunEvent) -> Option<EventDisplay> {
+        match event {
+            RunEvent::Output { metadata: Some(json), .. } => {
+                let event_type = json.get("type").and_then(|v| v.as_str());
+                match event_type {
+                    Some("assistant") => {
+                        if let Some(content) = json.get("content").and_then(|v| v.as_array()) {
+                            for item in content {
+                                if item.get("type").and_then(|v| v.as_str()) == Some("tool_use")
+                                    && let Some(name) = item.get("name").and_then(|v| v.as_str())
+                                {
+                                    return Some(EventDisplay {
+                                        text: format!("> Using tool: {name}\n"),
+                                    });
+                                }
+                            }
+                        }
+                        None
+                    }
+                    Some("result") | Some("system") | Some("init") => None,
+                    _ => {
+                        let text = json
+                            .get("content")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| json.get("text").and_then(|v| v.as_str()));
+                        text.map(|t| EventDisplay {
+                            text: t.to_string(),
+                        })
+                    }
+                }
+            }
+            RunEvent::Output { text, .. } => Some(EventDisplay { text: text.clone() }),
+            RunEvent::Progress(msg) => Some(EventDisplay { text: msg.clone() }),
+        }
     }
 }

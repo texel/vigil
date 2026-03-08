@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use chrono::Utc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 use vigil_core::models::{Run, RunContext, RunEvent, RunStatus, TriggerType};
@@ -18,8 +19,9 @@ pub async fn handle(name: &str, quiet: bool, dry_run: bool, store: &Store) -> Re
         bail!("task '{name}' is disabled");
     }
 
-    let runnable =
-        vigil_registry::deserialize_task(&scheduled.task.runner_type, &scheduled.task.json)?;
+    let runnable: Arc<Box<dyn vigil_registry::Runnable>> = Arc::new(
+        vigil_registry::deserialize_task(&scheduled.task.runner_type, &scheduled.task.json)?,
+    );
 
     let run_id = Uuid::new_v4();
     let log_dir = logs_dir().join(&scheduled.name);
@@ -59,15 +61,17 @@ pub async fn handle(name: &str, quiet: bool, dry_run: bool, store: &Store) -> Re
     let (tx, mut rx) = mpsc::channel::<RunEvent>(64);
 
     if !quiet {
+        let runnable_clone = Arc::clone(&runnable);
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
-                if let RunEvent::Output { text, .. } = event {
-                    eprint!("{text}");
+                if let Some(display) = runnable_clone.format_event(&event) {
+                    eprint!("{}", display.text);
                 }
             }
         });
+    } else {
+        drop(rx);
     }
-    // If quiet, rx is dropped here — tx.send() will fail silently in runners
 
     eprintln!("Running task '{name}'...");
     let result = runnable.run(&context, tx).await;
@@ -82,7 +86,11 @@ pub async fn handle(name: &str, quiet: bool, dry_run: bool, store: &Store) -> Re
 
             match run.status {
                 RunStatus::Succeeded => {
-                    eprintln!("Task '{name}' succeeded (exit code {})", output.exit_code)
+                    eprintln!("Task '{name}' succeeded (exit code {})", output.exit_code);
+                    let summary = runnable.summarize_run(&run.metadata);
+                    if let Some(text) = &summary.result {
+                        crate::format::render_markdown(text);
+                    }
                 }
                 _ => eprintln!(
                     "Task '{name}' finished with status: {} (exit code {})",
