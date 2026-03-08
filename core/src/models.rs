@@ -1,8 +1,10 @@
+use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::str::FromStr;
 use uuid::Uuid;
 
 /// A task config paired with scheduling metadata. Generic over the task config type.
@@ -54,7 +56,7 @@ pub enum DayFilter {
     Days(Vec<DayOfWeek>),
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, derive_more::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, derive_more::Display)]
 pub enum DayOfWeek {
     #[display("mon")]
     Monday,
@@ -87,6 +89,69 @@ impl fmt::Display for DayFilter {
                 let names: Vec<String> = days.iter().map(|d| d.to_string()).collect();
                 write!(f, "{}", names.join(","))
             }
+        }
+    }
+}
+
+/// Parses `"HH:MM"` time strings.
+///
+/// # Examples
+///
+/// ```
+/// use vigil_core::models::TimeOfDay;
+/// let t: TimeOfDay = "09:30".parse().unwrap();
+/// assert_eq!(t.hour, 9);
+/// assert_eq!(t.minute, 30);
+/// ```
+impl FromStr for TimeOfDay {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let s = s.trim();
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            bail!("expected time as HH:MM, got '{s}'");
+        }
+        let hour: u8 = parts[0]
+            .parse()
+            .map_err(|_| anyhow::anyhow!("invalid hour: '{}'", parts[0]))?;
+        let minute: u8 = parts[1]
+            .parse()
+            .map_err(|_| anyhow::anyhow!("invalid minute: '{}'", parts[1]))?;
+        if hour > 23 {
+            bail!("hour must be 0-23, got {hour}");
+        }
+        if minute > 59 {
+            bail!("minute must be 0-59, got {minute}");
+        }
+        Ok(TimeOfDay { hour, minute })
+    }
+}
+
+/// Parses day-of-week strings (case-insensitive).
+///
+/// Accepts three-letter abbreviations (`mon`, `tue`, …) and full names (`monday`, `tuesday`, …).
+///
+/// # Examples
+///
+/// ```
+/// use vigil_core::models::DayOfWeek;
+/// let d: DayOfWeek = "Friday".parse().unwrap();
+/// assert_eq!(d, DayOfWeek::Friday);
+/// ```
+impl FromStr for DayOfWeek {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "mon" | "monday" => Ok(DayOfWeek::Monday),
+            "tue" | "tuesday" => Ok(DayOfWeek::Tuesday),
+            "wed" | "wednesday" => Ok(DayOfWeek::Wednesday),
+            "thu" | "thursday" => Ok(DayOfWeek::Thursday),
+            "fri" | "friday" => Ok(DayOfWeek::Friday),
+            "sat" | "saturday" => Ok(DayOfWeek::Saturday),
+            "sun" | "sunday" => Ok(DayOfWeek::Sunday),
+            _ => bail!("unknown day: '{s}'. Use mon, tue, wed, thu, fri, sat, sun"),
         }
     }
 }
@@ -279,6 +344,41 @@ mod tests {
             timezone: None,
         };
         assert_eq!(t.to_string(), "weekdays at 09:00");
+    }
+
+    #[test]
+    fn time_of_day_from_str() {
+        let t: TimeOfDay = "14:30".parse().unwrap();
+        assert_eq!(t.hour, 14);
+        assert_eq!(t.minute, 30);
+
+        assert!("25:00".parse::<TimeOfDay>().is_err());
+        assert!("abc".parse::<TimeOfDay>().is_err());
+    }
+
+    #[test]
+    fn day_of_week_from_str_roundtrip() {
+        for day in [
+            DayOfWeek::Monday,
+            DayOfWeek::Tuesday,
+            DayOfWeek::Wednesday,
+            DayOfWeek::Thursday,
+            DayOfWeek::Friday,
+            DayOfWeek::Saturday,
+            DayOfWeek::Sunday,
+        ] {
+            let s = day.to_string();
+            let parsed: DayOfWeek = s.parse().unwrap();
+            assert_eq!(parsed, day);
+        }
+    }
+
+    #[test]
+    fn day_of_week_from_str_full_names() {
+        assert_eq!("Monday".parse::<DayOfWeek>().unwrap(), DayOfWeek::Monday);
+        assert_eq!("FRIDAY".parse::<DayOfWeek>().unwrap(), DayOfWeek::Friday);
+        assert_eq!("sunday".parse::<DayOfWeek>().unwrap(), DayOfWeek::Sunday);
+        assert!("banana".parse::<DayOfWeek>().is_err());
     }
 
     #[test]

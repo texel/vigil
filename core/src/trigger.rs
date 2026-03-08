@@ -51,64 +51,6 @@ impl FromStr for TriggerSpec {
     }
 }
 
-/// Parses `"HH:MM"` time strings.
-///
-/// # Examples
-///
-/// ```
-/// use vigil_core::models::TimeOfDay;
-/// let t: TimeOfDay = "09:30".parse().unwrap();
-/// assert_eq!(t.hour, 9);
-/// assert_eq!(t.minute, 30);
-/// ```
-impl FromStr for TimeOfDay {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        let s = s.trim();
-        let parts: Vec<&str> = s.split(':').collect();
-        if parts.len() != 2 {
-            bail!("expected time as HH:MM, got '{s}'");
-        }
-        let hour: u8 = parts[0]
-            .parse()
-            .map_err(|_| anyhow::anyhow!("invalid hour: '{}'", parts[0]))?;
-        let minute: u8 = parts[1]
-            .parse()
-            .map_err(|_| anyhow::anyhow!("invalid minute: '{}'", parts[1]))?;
-        if hour > 23 {
-            bail!("hour must be 0-23, got {hour}");
-        }
-        if minute > 59 {
-            bail!("minute must be 0-59, got {minute}");
-        }
-        Ok(TimeOfDay { hour, minute })
-    }
-}
-
-impl DayOfWeek {
-    /// Parse a day abbreviation like `"mon"`, `"tuesday"`, etc.
-    ///
-    /// Accepts three-letter abbreviations and full names (case-insensitive).
-    ///
-    /// # Accepted values
-    ///
-    /// `mon`/`monday`, `tue`/`tuesday`, `wed`/`wednesday`, `thu`/`thursday`,
-    /// `fri`/`friday`, `sat`/`saturday`, `sun`/`sunday`
-    pub fn parse_abbrev(s: &str) -> Result<Self> {
-        match s.trim().to_lowercase().as_str() {
-            "mon" | "monday" => Ok(DayOfWeek::Monday),
-            "tue" | "tuesday" => Ok(DayOfWeek::Tuesday),
-            "wed" | "wednesday" => Ok(DayOfWeek::Wednesday),
-            "thu" | "thursday" => Ok(DayOfWeek::Thursday),
-            "fri" | "friday" => Ok(DayOfWeek::Friday),
-            "sat" | "saturday" => Ok(DayOfWeek::Saturday),
-            "sun" | "sunday" => Ok(DayOfWeek::Sunday),
-            _ => bail!("unknown day: '{s}'. Use mon, tue, wed, thu, fri, sat, sun"),
-        }
-    }
-}
-
 fn parse_interval(s: &str) -> Result<TriggerSpec> {
     let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.len() != 2 {
@@ -140,7 +82,7 @@ fn parse_days(s: &str) -> Result<Option<DayFilter>> {
         _ => {
             // Try comma-separated day abbreviations
             let days: Result<Vec<DayOfWeek>> =
-                s.split(',').map(|d| DayOfWeek::parse_abbrev(d.trim())).collect();
+                s.split(',').map(|d| d.trim().parse::<DayOfWeek>()).collect();
             let days = days?;
             if days.is_empty() {
                 bail!("no days specified");
@@ -237,17 +179,4 @@ mod tests {
         assert!(matches!(t, TriggerSpec::Recurring { .. }));
     }
 
-    #[test]
-    fn time_of_day_from_str() {
-        let t: TimeOfDay = "14:30".parse().unwrap();
-        assert_eq!(t.hour, 14);
-        assert_eq!(t.minute, 30);
-    }
-
-    #[test]
-    fn day_of_week_parse_abbrev() {
-        assert!(matches!(DayOfWeek::parse_abbrev("mon").unwrap(), DayOfWeek::Monday));
-        assert!(matches!(DayOfWeek::parse_abbrev("Friday").unwrap(), DayOfWeek::Friday));
-        assert!(DayOfWeek::parse_abbrev("banana").is_err());
-    }
 }
