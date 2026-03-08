@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,9 +19,10 @@ pub async fn handle(name: &str, quiet: bool, dry_run: bool, store: &Store) -> Re
         bail!("task '{name}' is disabled");
     }
 
-    let runnable: Arc<Box<dyn vigil_registry::Runnable>> = Arc::new(
-        vigil_registry::deserialize_task(&scheduled.task.runner_type, &scheduled.task.json)?,
-    );
+    let runnable = Arc::<dyn vigil_registry::Runnable>::from(vigil_registry::deserialize_task(
+        &scheduled.task.runner_type,
+        &scheduled.task.json,
+    )?);
 
     let run_id = Uuid::new_v4();
     let log_dir = logs_dir().join(&scheduled.name);
