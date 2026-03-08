@@ -1,5 +1,5 @@
 use super::RegisterExecutor;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -79,6 +79,7 @@ pub async fn handle(executor: RegisterExecutor, store: &Store) -> Result<()> {
                     .map(|s| s.split(',').map(|t| t.trim().to_string()).collect()),
                 max_turns,
                 model,
+                permission_mode: None,
             };
 
             let working_directory = match dir {

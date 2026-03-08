@@ -39,6 +39,7 @@ pub fn deserialize_task(runner_type: &str, json: &str) -> Result<Box<dyn Runnabl
 #[async_trait::async_trait]
 pub trait Runnable: Send + Sync {
     fn runner_type(&self) -> &'static str;
+    fn preview(&self, context: &RunContext) -> Result<String>;
     async fn run(&self, context: &RunContext, tx: mpsc::Sender<RunEvent>) -> Result<RunOutput>;
 }
 
@@ -52,6 +53,10 @@ struct RunnableTask<T: Task, R: Runner<Task = T>> {
 impl<T: Task, R: Runner<Task = T>> Runnable for RunnableTask<T, R> {
     fn runner_type(&self) -> &'static str {
         self.task.runner_type()
+    }
+
+    fn preview(&self, context: &RunContext) -> Result<String> {
+        self.runner.preview(&self.task, context)
     }
 
     async fn run(&self, context: &RunContext, tx: mpsc::Sender<RunEvent>) -> Result<RunOutput> {

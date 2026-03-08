@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -9,6 +10,20 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 use vigil_core::models::{RunContext, RunEvent, RunOutput, RunStatus};
 use vigil_core::runner::{Runner, Task};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Display)]
+#[display(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub enum PermissionMode {
+    AcceptEdits,
+    BypassPermissions,
+    #[serde(rename = "default")]
+    Default,
+    #[default]
+    DontAsk,
+    Plan,
+    Auto,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeTask {
@@ -22,6 +37,9 @@ pub struct ClaudeTask {
     pub max_turns: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<PermissionMode>,
 }
 
 impl Task for ClaudeTask {
@@ -32,9 +50,67 @@ impl Task for ClaudeTask {
 
 pub struct ClaudeRunner;
 
+impl ClaudeRunner {
+    /// Build the argument list for a claude invocation.
+    fn build_args(task: &ClaudeTask, context: &RunContext) -> Result<Vec<String>> {
+        let prompt_text = task
+            .skill
+            .as_deref()
+            .or(task.prompt.as_deref())
+            .context("claude task must have either a skill or prompt")?;
+
+        let mut args = vec![
+            "-p".to_string(),
+            prompt_text.to_string(),
+            "--verbose".to_string(),
+            "--output-format".to_string(),
+            "stream-json".to_string(),
+            "--permission-mode".to_string(),
+            task.permission_mode
+                .as_ref()
+                .unwrap_or(&PermissionMode::default())
+                .to_string(),
+            "--session-id".to_string(),
+            context.run_id.to_string(),
+        ];
+
+        if let Some(ref tools) = task.allowed_tools {
+            for tool in tools {
+                args.push("--allowedTools".to_string());
+                args.push(tool.clone());
+            }
+        }
+
+        if let Some(max_turns) = task.max_turns {
+            args.push("--max-turns".to_string());
+            args.push(max_turns.to_string());
+        }
+
+        if let Some(ref model) = task.model {
+            args.push("--model".to_string());
+            args.push(model.clone());
+        }
+
+        Ok(args)
+    }
+}
+
 #[async_trait]
 impl Runner for ClaudeRunner {
     type Task = ClaudeTask;
+
+    fn preview(&self, task: &ClaudeTask, context: &RunContext) -> Result<String> {
+        let args = Self::build_args(task, context)?;
+        let escaped: Vec<String> = args
+            .iter()
+            .map(|a| shell_escape::escape(a.into()).into_owned())
+            .collect();
+        Ok(format!(
+            "cd {} && claude {}",
+            context.working_directory.display(),
+            escaped.join(" ")
+        ))
+    }
 
     async fn run(
         &self,
@@ -42,6 +118,8 @@ impl Runner for ClaudeRunner {
         context: &RunContext,
         tx: mpsc::Sender<RunEvent>,
     ) -> Result<RunOutput> {
+        let args = Self::build_args(task, context)?;
+
         let prompt_text = task
             .skill
             .as_deref()
@@ -55,26 +133,8 @@ impl Runner for ClaudeRunner {
         );
 
         let mut cmd = tokio::process::Command::new("claude");
-        cmd.arg("-p")
-            .arg(prompt_text)
-            .arg("--verbose")
-            .arg("--output-format")
-            .arg("stream-json")
-            .arg("--session-id")
-            .arg(context.run_id.to_string());
-
-        if let Some(ref tools) = task.allowed_tools {
-            for tool in tools {
-                cmd.arg("--allowedTools").arg(tool);
-            }
-        }
-
-        if let Some(max_turns) = task.max_turns {
-            cmd.arg("--max-turns").arg(max_turns.to_string());
-        }
-
-        if let Some(ref model) = task.model {
-            cmd.arg("--model").arg(model);
+        for arg in &args {
+            cmd.arg(arg);
         }
 
         cmd.current_dir(&context.working_directory)

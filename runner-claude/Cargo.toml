@@ -7,7 +7,9 @@ edition.workspace = true
 vigil-core.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+derive_more.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+shell-escape.workspace = true
 tokio = { workspace = true, features = ["process"] }
 tracing.workspace = true

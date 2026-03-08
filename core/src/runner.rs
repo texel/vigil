@@ -16,6 +16,9 @@ pub trait Task: Send + Sync + Serialize + DeserializeOwned + Debug + 'static {
 pub trait Runner: Send + Sync {
     type Task: Task;
 
+    /// Returns a human-readable description of what the runner would do.
+    fn preview(&self, task: &Self::Task, context: &RunContext) -> Result<String>;
+
     async fn run(
         &self,
         task: &Self::Task,

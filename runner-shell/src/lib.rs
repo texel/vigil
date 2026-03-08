@@ -26,6 +26,14 @@ pub struct ShellRunner;
 impl Runner for ShellRunner {
     type Task = ShellTask;
 
+    fn preview(&self, task: &ShellTask, context: &RunContext) -> Result<String> {
+        Ok(format!(
+            "cd {} && sh -c {:?}",
+            context.working_directory.display(),
+            task.command
+        ))
+    }
+
     async fn run(
         &self,
         task: &ShellTask,

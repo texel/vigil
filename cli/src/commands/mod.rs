@@ -30,6 +30,9 @@ pub enum Command {
         /// Suppress streaming output
         #[arg(short, long)]
         quiet: bool,
+        /// Preview what would run without executing
+        #[arg(long)]
+        dry_run: bool,
     },
     /// List all registered tasks
     List,
@@ -106,7 +109,7 @@ pub enum ClaudeCommand {
 pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
     match cli.command {
         Command::Register { executor } => register::handle(executor, &store).await,
-        Command::Run { name, quiet } => run::handle(&name, quiet, &store).await,
+        Command::Run { name, quiet, dry_run } => run::handle(&name, quiet, dry_run, &store).await,
         Command::List => list::handle(&store).await,
         Command::Unregister { name } => unregister::handle(&name, &store).await,
         Command::Claude { command } => match command {

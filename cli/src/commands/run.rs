@@ -8,7 +8,7 @@ use vigil_registry::Store;
 
 use crate::logs_dir;
 
-pub async fn handle(name: &str, quiet: bool, store: &Store) -> Result<()> {
+pub async fn handle(name: &str, quiet: bool, dry_run: bool, store: &Store) -> Result<()> {
     let scheduled = store
         .get_task_by_name(name)
         .await?
@@ -35,6 +35,12 @@ pub async fn handle(name: &str, quiet: bool, store: &Store) -> Result<()> {
         working_directory,
         log_path: log_path.clone(),
     };
+
+    if dry_run {
+        let preview = runnable.preview(&context)?;
+        println!("{preview}");
+        return Ok(());
+    }
 
     let mut run = Run {
         id: run_id,
