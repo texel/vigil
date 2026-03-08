@@ -1,5 +1,6 @@
 use anyhow::{Result, bail, Context};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use vigil_core::models::{DayFilter, DayOfWeek, TriggerSpec};
 use vigil_core::scheduler::{ScheduleStatus, Scheduler};
@@ -8,80 +9,27 @@ fn label(name: &str) -> String {
     format!("com.vigil.task.{name}")
 }
 
-fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> String {
-    let label = label(name);
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let log_dir = format!("{home}/.vigil/logs/{name}");
-    let log_path = format!("{log_dir}/launchd.log");
-
-    let trigger_section = match trigger {
-        TriggerSpec::Recurring { times, days, .. } => {
-            let intervals = build_calendar_intervals(times, days.as_ref());
-            format!("<key>StartCalendarInterval</key>\n    <array>\n{intervals}    </array>")
-        }
-        TriggerSpec::Interval { every } => {
-            let secs = every.as_secs();
-            format!("<key>StartInterval</key>\n    <integer>{secs}</integer>")
-        }
-    };
-
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{label}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{vigil_bin}</string>
-        <string>run</string>
-        <string>{name}</string>
-        <string>--quiet</string>
-    </array>
-    {trigger_section}
-    <key>StandardOutPath</key>
-    <string>{log_path}</string>
-    <key>StandardErrorPath</key>
-    <string>{log_path}</string>
-    <key>RunAtLoad</key>
-    <false/>
-</dict>
-</plist>
-"#
-    )
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct LaunchdPlist {
+    label: String,
+    program_arguments: Vec<String>,
+    standard_out_path: String,
+    standard_error_path: String,
+    run_at_load: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_interval: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_calendar_interval: Option<Vec<CalendarInterval>>,
 }
 
-fn build_calendar_intervals(
-    times: &[vigil_core::models::TimeOfDay],
-    days: Option<&DayFilter>,
-) -> String {
-    let weekdays: Option<Vec<u8>> = days.map(|d| match d {
-        DayFilter::Weekdays => vec![1, 2, 3, 4, 5],
-        DayFilter::Weekends => vec![0, 6],
-        DayFilter::Days(days) => days.iter().map(|d| launchd_weekday(d)).collect(),
-    });
-
-    let mut result = String::new();
-    for time in times {
-        match &weekdays {
-            Some(days) => {
-                for &day in days {
-                    result.push_str(&format!(
-                        "        <dict>\n            <key>Weekday</key>\n            <integer>{day}</integer>\n            <key>Hour</key>\n            <integer>{}</integer>\n            <key>Minute</key>\n            <integer>{}</integer>\n        </dict>\n",
-                        time.hour, time.minute
-                    ));
-                }
-            }
-            None => {
-                result.push_str(&format!(
-                    "        <dict>\n            <key>Hour</key>\n            <integer>{}</integer>\n            <key>Minute</key>\n            <integer>{}</integer>\n        </dict>\n",
-                    time.hour, time.minute
-                ));
-            }
-        }
-    }
-    result
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct CalendarInterval {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    weekday: Option<u8>,
+    hour: u8,
+    minute: u8,
 }
 
 /// Launchd weekday: 0=Sunday, 1=Monday, ..., 6=Saturday
@@ -95,6 +43,72 @@ fn launchd_weekday(day: &DayOfWeek) -> u8 {
         DayOfWeek::Friday => 5,
         DayOfWeek::Saturday => 6,
     }
+}
+
+fn build_calendar_intervals(
+    times: &[vigil_core::models::TimeOfDay],
+    days: Option<&DayFilter>,
+) -> Vec<CalendarInterval> {
+    let weekdays: Option<Vec<u8>> = days.map(|d| match d {
+        DayFilter::Weekdays => vec![1, 2, 3, 4, 5],
+        DayFilter::Weekends => vec![0, 6],
+        DayFilter::Days(days) => days.iter().map(|d| launchd_weekday(d)).collect(),
+    });
+
+    let mut intervals = Vec::new();
+    for time in times {
+        match &weekdays {
+            Some(days) => {
+                for &day in days {
+                    intervals.push(CalendarInterval {
+                        weekday: Some(day),
+                        hour: time.hour,
+                        minute: time.minute,
+                    });
+                }
+            }
+            None => {
+                intervals.push(CalendarInterval {
+                    weekday: None,
+                    hour: time.hour,
+                    minute: time.minute,
+                });
+            }
+        }
+    }
+    intervals
+}
+
+fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let log_path = format!("{home}/.vigil/logs/{name}/launchd.log");
+
+    let (start_interval, start_calendar_interval) = match trigger {
+        TriggerSpec::Recurring { times, days, .. } => {
+            let intervals = build_calendar_intervals(times, days.as_ref());
+            (None, Some(intervals))
+        }
+        TriggerSpec::Interval { every } => (Some(every.as_secs()), None),
+    };
+
+    let plist = LaunchdPlist {
+        label: label(name),
+        program_arguments: vec![
+            vigil_bin.to_string(),
+            "run".to_string(),
+            name.to_string(),
+            "--quiet".to_string(),
+        ],
+        standard_out_path: log_path.clone(),
+        standard_error_path: log_path,
+        run_at_load: false,
+        start_interval,
+        start_calendar_interval,
+    };
+
+    let mut buf = Vec::new();
+    plist::to_writer_xml(&mut buf, &plist)?;
+    Ok(String::from_utf8(buf)?)
 }
 
 pub struct LaunchdScheduler {
@@ -126,7 +140,7 @@ impl LaunchdScheduler {
 impl Scheduler for LaunchdScheduler {
     async fn register(&self, name: &str, trigger: &TriggerSpec) -> Result<()> {
         let plist_content =
-            generate_plist(name, trigger, &self.vigil_bin.to_string_lossy());
+            generate_plist(name, trigger, &self.vigil_bin.to_string_lossy())?;
         let plist_path = self.plist_path(name);
         let domain = self.gui_domain();
 
@@ -209,15 +223,12 @@ mod tests {
             days: Some(DayFilter::Weekdays),
             timezone: None,
         };
-        let plist = generate_plist("daily-briefing", &trigger, "/usr/local/bin/vigil");
+        let plist = generate_plist("daily-briefing", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<string>com.vigil.task.daily-briefing</string>"));
         assert!(plist.contains("<string>run</string>"));
         assert!(plist.contains("<key>StartCalendarInterval</key>"));
-        // Mon-Fri = weekdays 1-5
-        assert!(plist.contains("<integer>1</integer>")); // Monday
-        assert!(plist.contains("<integer>5</integer>")); // Friday
-        assert!(!plist.contains("<key>Weekday</key>\n            <integer>0</integer>")); // No Sunday
-        assert!(!plist.contains("<key>Weekday</key>\n            <integer>6</integer>")); // No Saturday
+        // Should have 5 calendar intervals (Mon-Fri)
+        assert_eq!(plist.matches("<key>Weekday</key>").count(), 5);
     }
 
     #[test]
@@ -227,7 +238,7 @@ mod tests {
             days: None,
             timezone: None,
         };
-        let plist = generate_plist("morning-task", &trigger, "/usr/local/bin/vigil");
+        let plist = generate_plist("morning-task", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>StartCalendarInterval</key>"));
         assert!(plist.contains("<integer>8</integer>"));
         assert!(plist.contains("<integer>30</integer>"));
@@ -240,7 +251,7 @@ mod tests {
         let trigger = TriggerSpec::Interval {
             every: std::time::Duration::from_secs(3600),
         };
-        let plist = generate_plist("health-check", &trigger, "/usr/local/bin/vigil");
+        let plist = generate_plist("health-check", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>StartInterval</key>"));
         assert!(plist.contains("<integer>3600</integer>"));
     }
@@ -250,7 +261,7 @@ mod tests {
         let trigger = TriggerSpec::Interval {
             every: std::time::Duration::from_secs(60),
         };
-        let plist = generate_plist("test", &trigger, "/usr/local/bin/vigil");
+        let plist = generate_plist("test", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<string>--quiet</string>"));
     }
 
@@ -259,9 +270,27 @@ mod tests {
         let trigger = TriggerSpec::Interval {
             every: std::time::Duration::from_secs(60),
         };
-        let plist = generate_plist("my-task", &trigger, "/usr/local/bin/vigil");
+        let plist = generate_plist("my-task", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>StandardOutPath</key>"));
         assert!(plist.contains("<key>StandardErrorPath</key>"));
         assert!(plist.contains(".vigil/logs/my-task/launchd.log"));
+    }
+
+    #[test]
+    fn plist_is_valid_xml() {
+        let trigger = TriggerSpec::Recurring {
+            times: vec![TimeOfDay { hour: 9, minute: 0 }],
+            days: Some(DayFilter::Days(vec![DayOfWeek::Monday, DayOfWeek::Friday])),
+            timezone: None,
+        };
+        let xml = generate_plist("xml-test", &trigger, "/usr/local/bin/vigil").unwrap();
+        // Should parse back successfully
+        let parsed: LaunchdPlist = plist::from_bytes(xml.as_bytes()).unwrap();
+        assert_eq!(parsed.label, "com.vigil.task.xml-test");
+        assert_eq!(parsed.program_arguments.len(), 4);
+        let intervals = parsed.start_calendar_interval.unwrap();
+        assert_eq!(intervals.len(), 2);
+        assert_eq!(intervals[0].weekday, Some(1)); // Monday
+        assert_eq!(intervals[1].weekday, Some(5)); // Friday
     }
 }

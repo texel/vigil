@@ -12,6 +12,7 @@ vigil-runner-shell = { path = "runner-shell" }
 vigil-runner-claude = { path = "runner-claude" }
 vigil-registry = { path = "registry" }
 vigil-scheduler-launchd = { path = "scheduler-launchd" }
+plist = "1"
 anyhow = "1"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
