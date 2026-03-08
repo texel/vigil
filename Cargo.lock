@@ -2260,6 +2260,7 @@ dependencies = [
  "vigil-registry",
  "vigil-runner-claude",
  "vigil-runner-shell",
+ "vigil-scheduler-launchd",
 ]
 
 [[package]]

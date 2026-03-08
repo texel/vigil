@@ -3,7 +3,10 @@ mod list;
 mod register;
 mod run;
 mod runs;
+mod schedule;
+mod status;
 mod unregister;
+mod unschedule;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -51,6 +54,20 @@ pub enum Command {
         /// Run ID (full UUID or short prefix)
         run_id: String,
     },
+    /// Schedule a task for recurring execution
+    Schedule {
+        /// Task name
+        name: String,
+        /// Trigger expression (e.g. "daily at 09:00", "every 5 minutes")
+        trigger: Vec<String>,
+    },
+    /// Remove a task's schedule
+    Unschedule {
+        /// Task name
+        name: String,
+    },
+    /// Show task status and schedules
+    Status,
     /// Show recent task runs
     Runs {
         /// Filter by task name
@@ -112,6 +129,9 @@ pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
         Command::Run { name, quiet, dry_run } => run::handle(&name, quiet, dry_run, &store).await,
         Command::List => list::handle(&store).await,
         Command::Unregister { name } => unregister::handle(&name, &store).await,
+        Command::Schedule { name, trigger } => schedule::handle(&name, &trigger, &store).await,
+        Command::Unschedule { name } => unschedule::handle(&name, &store).await,
+        Command::Status => status::handle(&store).await,
         Command::Claude { command } => match command {
             ClaudeCommand::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
         },
