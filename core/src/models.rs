@@ -54,34 +54,27 @@ pub enum DayFilter {
     Days(Vec<DayOfWeek>),
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, derive_more::Display)]
 pub enum DayOfWeek {
+    #[display("mon")]
     Monday,
+    #[display("tue")]
     Tuesday,
+    #[display("wed")]
     Wednesday,
+    #[display("thu")]
     Thursday,
+    #[display("fri")]
     Friday,
+    #[display("sat")]
     Saturday,
+    #[display("sun")]
     Sunday,
 }
 
 impl fmt::Display for TimeOfDay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:02}:{:02}", self.hour, self.minute)
-    }
-}
-
-impl fmt::Display for DayOfWeek {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DayOfWeek::Monday => write!(f, "mon"),
-            DayOfWeek::Tuesday => write!(f, "tue"),
-            DayOfWeek::Wednesday => write!(f, "wed"),
-            DayOfWeek::Thursday => write!(f, "thu"),
-            DayOfWeek::Friday => write!(f, "fri"),
-            DayOfWeek::Saturday => write!(f, "sat"),
-            DayOfWeek::Sunday => write!(f, "sun"),
-        }
     }
 }
 
@@ -150,7 +143,19 @@ pub struct Run {
     pub triggered_by: TriggerType,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_more::Display,
+    derive_more::FromStr,
+)]
+#[from_str(rename_all = "snake_case")]
+#[display(rename_all = "snake_case")]
 pub enum RunStatus {
     Running,
     Succeeded,
@@ -158,56 +163,22 @@ pub enum RunStatus {
     TimedOut,
 }
 
-impl std::fmt::Display for RunStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RunStatus::Running => write!(f, "running"),
-            RunStatus::Succeeded => write!(f, "succeeded"),
-            RunStatus::Failed => write!(f, "failed"),
-            RunStatus::TimedOut => write!(f, "timed_out"),
-        }
-    }
-}
-
-impl std::str::FromStr for RunStatus {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "running" => Ok(RunStatus::Running),
-            "succeeded" => Ok(RunStatus::Succeeded),
-            "failed" => Ok(RunStatus::Failed),
-            "timed_out" => Ok(RunStatus::TimedOut),
-            _ => Err(anyhow::anyhow!("unknown run status: {s}")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_more::Display,
+    derive_more::FromStr,
+)]
+#[display(rename_all = "snake_case")]
+#[from_str(rename_all = "snake_case")]
 pub enum TriggerType {
     Manual,
     Schedule,
-}
-
-impl std::fmt::Display for TriggerType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TriggerType::Manual => write!(f, "manual"),
-            TriggerType::Schedule => write!(f, "schedule"),
-        }
-    }
-}
-
-impl std::str::FromStr for TriggerType {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "manual" => Ok(TriggerType::Manual),
-            "schedule" => Ok(TriggerType::Schedule),
-            _ => Err(anyhow::anyhow!("unknown trigger type: {s}")),
-        }
-    }
 }
 
 /// A streaming event emitted by a runner during execution.
@@ -253,6 +224,7 @@ mod tests {
             RunStatus::TimedOut,
         ] {
             let s = status.to_string();
+            println!("RunStatus as string: {}", s);
             let parsed: RunStatus = s.parse().unwrap();
             assert_eq!(parsed, status);
         }
@@ -289,8 +261,12 @@ mod tests {
         assert_eq!(DayFilter::Weekdays.to_string(), "weekdays");
         assert_eq!(DayFilter::Weekends.to_string(), "weekends");
         assert_eq!(
-            DayFilter::Days(vec![DayOfWeek::Monday, DayOfWeek::Wednesday, DayOfWeek::Friday])
-                .to_string(),
+            DayFilter::Days(vec![
+                DayOfWeek::Monday,
+                DayOfWeek::Wednesday,
+                DayOfWeek::Friday
+            ])
+            .to_string(),
             "mon,wed,fri"
         );
     }

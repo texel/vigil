@@ -1,13 +1,13 @@
 use crate::models::{DayFilter, DayOfWeek, TimeOfDay, TriggerSpec};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::time::Duration;
 
 pub fn parse_trigger(input: &str) -> Result<TriggerSpec> {
     let input = input.trim().to_lowercase();
 
     // "every N unit" pattern
-    if input.starts_with("every ") {
-        return parse_interval(&input[6..]);
+    if let Some(interval) = input.strip_prefix("every ") {
+        return parse_interval(interval);
     }
 
     // "<days> at HH:MM" pattern
@@ -23,15 +23,19 @@ pub fn parse_trigger(input: &str) -> Result<TriggerSpec> {
         });
     }
 
-    bail!("unrecognized trigger format: '{input}'. Try 'daily at 09:00', 'weekdays at 09:00', or 'every 2 hours'")
+    bail!(
+        "unrecognized trigger format: '{input}'. Try 'daily at 09:00', 'weekdays at 09:00', or 'every 2 hours'"
+    )
 }
 
 fn parse_interval(s: &str) -> Result<TriggerSpec> {
-    let parts: Vec<&str> = s.trim().split_whitespace().collect();
+    let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.len() != 2 {
         bail!("expected 'every N unit', got 'every {s}'");
     }
-    let n: u64 = parts[0].parse().map_err(|_| anyhow::anyhow!("invalid number: '{}'", parts[0]))?;
+    let n: u64 = parts[0]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid number: '{}'", parts[0]))?;
     if n == 0 {
         bail!("interval must be greater than 0");
     }
@@ -51,8 +55,12 @@ fn parse_time(s: &str) -> Result<TimeOfDay> {
     if parts.len() != 2 {
         bail!("expected time as HH:MM, got '{s}'");
     }
-    let hour: u8 = parts[0].parse().map_err(|_| anyhow::anyhow!("invalid hour: '{}'", parts[0]))?;
-    let minute: u8 = parts[1].parse().map_err(|_| anyhow::anyhow!("invalid minute: '{}'", parts[1]))?;
+    let hour: u8 = parts[0]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid hour: '{}'", parts[0]))?;
+    let minute: u8 = parts[1]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid minute: '{}'", parts[1]))?;
     if hour > 23 {
         bail!("hour must be 0-23, got {hour}");
     }
