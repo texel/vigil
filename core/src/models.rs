@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -62,6 +63,77 @@ pub enum DayOfWeek {
     Friday,
     Saturday,
     Sunday,
+}
+
+impl fmt::Display for TimeOfDay {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:02}:{:02}", self.hour, self.minute)
+    }
+}
+
+impl fmt::Display for DayOfWeek {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DayOfWeek::Monday => write!(f, "mon"),
+            DayOfWeek::Tuesday => write!(f, "tue"),
+            DayOfWeek::Wednesday => write!(f, "wed"),
+            DayOfWeek::Thursday => write!(f, "thu"),
+            DayOfWeek::Friday => write!(f, "fri"),
+            DayOfWeek::Saturday => write!(f, "sat"),
+            DayOfWeek::Sunday => write!(f, "sun"),
+        }
+    }
+}
+
+impl fmt::Display for DayFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DayFilter::Weekdays => write!(f, "weekdays"),
+            DayFilter::Weekends => write!(f, "weekends"),
+            DayFilter::Days(days) => {
+                let names: Vec<String> = days.iter().map(|d| d.to_string()).collect();
+                write!(f, "{}", names.join(","))
+            }
+        }
+    }
+}
+
+impl fmt::Display for TriggerSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TriggerSpec::Recurring {
+                times,
+                days,
+                timezone,
+            } => {
+                if let Some(days) = days {
+                    write!(f, "{days}")?;
+                } else {
+                    write!(f, "daily")?;
+                }
+                if !times.is_empty() {
+                    let time_strs: Vec<String> = times.iter().map(|t| t.to_string()).collect();
+                    write!(f, " at {}", time_strs.join(","))?;
+                }
+                if let Some(tz) = timezone {
+                    write!(f, " ({tz})")?;
+                }
+                Ok(())
+            }
+            TriggerSpec::Interval { every } => {
+                let secs = every.as_secs();
+                if secs % 3600 == 0 {
+                    let hours = secs / 3600;
+                    write!(f, "every {hours} hours")
+                } else if secs % 60 == 0 {
+                    let mins = secs / 60;
+                    write!(f, "every {mins} minutes")
+                } else {
+                    write!(f, "every {secs} seconds")
+                }
+            }
+        }
+    }
 }
 
 /// Tracks a single execution of a task.
@@ -198,5 +270,46 @@ mod tests {
     #[test]
     fn run_status_from_str_invalid_returns_error() {
         assert!(RunStatus::from_str("bogus").is_err());
+    }
+
+    #[test]
+    fn time_of_day_display() {
+        let t = TimeOfDay { hour: 9, minute: 5 };
+        assert_eq!(t.to_string(), "09:05");
+    }
+
+    #[test]
+    fn day_of_week_display() {
+        assert_eq!(DayOfWeek::Monday.to_string(), "mon");
+        assert_eq!(DayOfWeek::Sunday.to_string(), "sun");
+    }
+
+    #[test]
+    fn day_filter_display() {
+        assert_eq!(DayFilter::Weekdays.to_string(), "weekdays");
+        assert_eq!(DayFilter::Weekends.to_string(), "weekends");
+        assert_eq!(
+            DayFilter::Days(vec![DayOfWeek::Monday, DayOfWeek::Wednesday, DayOfWeek::Friday])
+                .to_string(),
+            "mon,wed,fri"
+        );
+    }
+
+    #[test]
+    fn trigger_spec_recurring_display() {
+        let t = TriggerSpec::Recurring {
+            times: vec![TimeOfDay { hour: 9, minute: 0 }],
+            days: Some(DayFilter::Weekdays),
+            timezone: None,
+        };
+        assert_eq!(t.to_string(), "weekdays at 09:00");
+    }
+
+    #[test]
+    fn trigger_spec_interval_display() {
+        let t = TriggerSpec::Interval {
+            every: std::time::Duration::from_secs(7200),
+        };
+        assert_eq!(t.to_string(), "every 2 hours");
     }
 }
