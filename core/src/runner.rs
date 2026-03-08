@@ -1,9 +1,10 @@
-use crate::models::{RunContext, RunOutput};
+use crate::models::{RunContext, RunEvent, RunOutput};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
+use tokio::sync::mpsc;
 
 /// Pure data describing what a runner should execute. Separated from execution behavior.
 pub trait Task: Send + Sync + Serialize + DeserializeOwned + Debug + 'static {
@@ -15,5 +16,10 @@ pub trait Task: Send + Sync + Serialize + DeserializeOwned + Debug + 'static {
 pub trait Runner: Send + Sync {
     type Task: Task;
 
-    async fn run(&self, task: &Self::Task, context: &RunContext) -> Result<RunOutput>;
+    async fn run(
+        &self,
+        task: &Self::Task,
+        context: &RunContext,
+        tx: mpsc::Sender<RunEvent>,
+    ) -> Result<RunOutput>;
 }

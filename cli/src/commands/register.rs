@@ -48,6 +48,20 @@ pub async fn handle(executor: RegisterExecutor, store: &Store) -> Result<()> {
             max_turns,
             model,
         } => {
+            // Resolve name and prompt_or_skill:
+            // - `vigil register claude /daily-briefing` → name: daily-briefing, skill: /daily-briefing
+            // - `vigil register claude daily-briefing /daily-briefing` → as given
+            // - `vigil register claude my-task "prompt"` → as given
+            // - `vigil register claude "prompt"` → error
+            let (name, prompt_or_skill) = match prompt_or_skill {
+                Some(ps) => (name, ps),
+                None if name.starts_with('/') => {
+                    let task_name = name.trim_start_matches('/').to_string();
+                    (task_name, name)
+                }
+                None => bail!("inline prompts require both a name and a prompt"),
+            };
+
             if store.get_task_by_name(&name).await?.is_some() {
                 bail!("task '{name}' already exists");
             }

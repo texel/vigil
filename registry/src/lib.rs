@@ -5,7 +5,8 @@ mod store;
 pub use store::Store;
 
 use anyhow::{Result, bail};
-use vigil_core::models::{RunContext, RunOutput};
+use tokio::sync::mpsc;
+use vigil_core::models::{RunContext, RunEvent, RunOutput};
 use vigil_core::runner::{Runner, Task};
 use vigil_runner_claude::{ClaudeRunner, ClaudeTask};
 use vigil_runner_shell::{ShellRunner, ShellTask};
@@ -38,7 +39,7 @@ pub fn deserialize_task(runner_type: &str, json: &str) -> Result<Box<dyn Runnabl
 #[async_trait::async_trait]
 pub trait Runnable: Send + Sync {
     fn runner_type(&self) -> &'static str;
-    async fn run(&self, context: &RunContext) -> Result<RunOutput>;
+    async fn run(&self, context: &RunContext, tx: mpsc::Sender<RunEvent>) -> Result<RunOutput>;
 }
 
 /// Composes a Task with its Runner.
@@ -53,8 +54,8 @@ impl<T: Task, R: Runner<Task = T>> Runnable for RunnableTask<T, R> {
         self.task.runner_type()
     }
 
-    async fn run(&self, context: &RunContext) -> Result<RunOutput> {
-        self.runner.run(&self.task, context).await
+    async fn run(&self, context: &RunContext, tx: mpsc::Sender<RunEvent>) -> Result<RunOutput> {
+        self.runner.run(&self.task, context, tx).await
     }
 }
 

@@ -1,13 +1,14 @@
 use anyhow::{bail, Result};
 use chrono::Utc;
 use std::collections::HashMap;
+use tokio::sync::mpsc;
 use uuid::Uuid;
-use vigil_core::models::{Run, RunContext, RunStatus, TriggerType};
+use vigil_core::models::{Run, RunContext, RunEvent, RunStatus, TriggerType};
 use vigil_registry::Store;
 
 use crate::logs_dir;
 
-pub async fn handle(name: &str, store: &Store) -> Result<()> {
+pub async fn handle(name: &str, quiet: bool, store: &Store) -> Result<()> {
     let scheduled = store
         .get_task_by_name(name)
         .await?
@@ -49,8 +50,21 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
 
     store.insert_run(&run).await?;
 
-    println!("Running task '{name}'...");
-    let result = runnable.run(&context).await;
+    let (tx, mut rx) = mpsc::channel::<RunEvent>(64);
+
+    if !quiet {
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                if let RunEvent::Output { text, .. } = event {
+                    eprint!("{text}");
+                }
+            }
+        });
+    }
+    // If quiet, rx is dropped here — tx.send() will fail silently in runners
+
+    eprintln!("Running task '{name}'...");
+    let result = runnable.run(&context, tx).await;
 
     match result {
         Ok(output) => {
@@ -62,9 +76,9 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
 
             match run.status {
                 RunStatus::Succeeded => {
-                    println!("Task '{name}' succeeded (exit code {})", output.exit_code)
+                    eprintln!("Task '{name}' succeeded (exit code {})", output.exit_code)
                 }
-                _ => println!(
+                _ => eprintln!(
                     "Task '{name}' finished with status: {} (exit code {})",
                     run.status, output.exit_code
                 ),
@@ -74,7 +88,7 @@ pub async fn handle(name: &str, store: &Store) -> Result<()> {
             run.status = RunStatus::Failed;
             run.completed_at = Some(Utc::now());
             store.update_run(&run).await?;
-            println!("Task '{name}' failed: {e:#}");
+            eprintln!("Task '{name}' failed: {e:#}");
         }
     }
 

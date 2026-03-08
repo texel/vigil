@@ -1,16 +1,11 @@
 use anyhow::{bail, Result};
-use uuid::Uuid;
 use vigil_registry::Store;
 
 pub async fn handle(run_id: &str, store: &Store) -> Result<()> {
-    let id: Uuid = run_id
-        .parse()
-        .map_err(|_| anyhow::anyhow!("invalid run ID: {run_id}"))?;
-
     let run = store
-        .get_run_by_id(id)
+        .get_run_by_id_prefix(run_id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("run '{run_id}' not found"))?;
+        .ok_or_else(|| anyhow::anyhow!("no run found matching '{run_id}'"))?;
 
     let task = store
         .get_task_by_id(run.task_id)
@@ -30,7 +25,7 @@ pub async fn handle(run_id: &str, store: &Store) -> Result<()> {
         .get("session_id")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| id.to_string());
+        .unwrap_or_else(|| run.id.to_string());
 
     let working_directory = task
         .working_directory

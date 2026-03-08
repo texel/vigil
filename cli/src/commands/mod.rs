@@ -1,8 +1,8 @@
+mod claude;
+mod list;
 mod register;
-mod resume;
 mod run;
 mod runs;
-mod list;
 mod unregister;
 
 use anyhow::Result;
@@ -27,6 +27,9 @@ pub enum Command {
     Run {
         /// Task name
         name: String,
+        /// Suppress streaming output
+        #[arg(short, long)]
+        quiet: bool,
     },
     /// List all registered tasks
     List,
@@ -35,9 +38,14 @@ pub enum Command {
         /// Task name
         name: String,
     },
-    /// Resume a failed Claude session interactively
+    /// Claude-specific commands
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeCommand,
+    },
+    /// Resume a failed Claude session interactively (shortcut for `claude resume`)
     Resume {
-        /// Run ID (full UUID)
+        /// Run ID (full UUID or short prefix)
         run_id: String,
     },
     /// Show recent task runs
@@ -47,6 +55,9 @@ pub enum Command {
         /// Max runs to show
         #[arg(short, long, default_value = "20")]
         limit: u32,
+        /// Show full UUIDs instead of short IDs
+        #[arg(short, long)]
+        verbose: bool,
     },
 }
 
@@ -64,10 +75,10 @@ pub enum RegisterExecutor {
     },
     /// Register a Claude Code task (skill or inline prompt)
     Claude {
-        /// Task name
+        /// Task name (or skill shorthand like /daily-briefing)
         name: String,
         /// Skill name (e.g. /daily-briefing) or inline prompt
-        prompt_or_skill: String,
+        prompt_or_skill: Option<String>,
         /// Working directory (defaults to current directory)
         #[arg(short, long)]
         dir: Option<String>,
@@ -83,13 +94,25 @@ pub enum RegisterExecutor {
     },
 }
 
+#[derive(Subcommand)]
+pub enum ClaudeCommand {
+    /// Resume a failed Claude session interactively
+    Resume {
+        /// Run ID (full UUID or short prefix)
+        run_id: String,
+    },
+}
+
 pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
     match cli.command {
         Command::Register { executor } => register::handle(executor, &store).await,
-        Command::Run { name } => run::handle(&name, &store).await,
+        Command::Run { name, quiet } => run::handle(&name, quiet, &store).await,
         Command::List => list::handle(&store).await,
         Command::Unregister { name } => unregister::handle(&name, &store).await,
-        Command::Resume { run_id } => resume::handle(&run_id, &store).await,
-        Command::Runs { name, limit } => runs::handle(name.as_deref(), limit, &store).await,
+        Command::Claude { command } => match command {
+            ClaudeCommand::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
+        },
+        Command::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
+        Command::Runs { name, limit, verbose } => runs::handle(name.as_deref(), limit, verbose, &store).await,
     }
 }

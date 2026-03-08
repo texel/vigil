@@ -1,5 +1,5 @@
 use vigil_core::models::{RawTask, Run, ScheduledTask};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use libsql::{params, Connection, Database};
 use std::collections::HashMap;
@@ -235,6 +235,29 @@ impl Store {
             Some(row) => Ok(Some(scheduled_task_from_row(&row)?)),
             None => Ok(None),
         }
+    }
+
+    pub async fn get_run_by_id_prefix(&self, prefix: &str) -> Result<Option<Run>> {
+        let conn = self.conn().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, task_id, started_at, completed_at, exit_code, status, metadata_json, log_path, triggered_by
+                 FROM runs WHERE id LIKE ?1",
+                params![format!("{prefix}%")],
+            )
+            .await
+            .context("failed to query run by prefix")?;
+
+        let first = match rows.next().await? {
+            Some(row) => run_from_row(&row)?,
+            None => return Ok(None),
+        };
+
+        if rows.next().await?.is_some() {
+            bail!("ambiguous run ID prefix '{prefix}' — matches multiple runs, use more characters");
+        }
+
+        Ok(Some(first))
     }
 
     pub async fn get_runs_for_task(&self, task_id: Uuid, limit: u32) -> Result<Vec<Run>> {

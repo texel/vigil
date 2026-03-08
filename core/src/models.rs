@@ -138,6 +138,19 @@ impl std::str::FromStr for TriggerType {
     }
 }
 
+/// A streaming event emitted by a runner during execution.
+#[derive(Debug, Clone)]
+pub enum RunEvent {
+    /// A line/chunk of output from the runner
+    Output {
+        text: String,
+        /// Optional structured data (runner-specific, e.g. claude event type)
+        metadata: Option<serde_json::Value>,
+    },
+    /// Informational progress hint
+    Progress(String),
+}
+
 /// Context provided to a runner when executing a task.
 #[derive(Debug, Clone)]
 pub struct RunContext {

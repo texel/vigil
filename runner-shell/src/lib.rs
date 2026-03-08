@@ -3,7 +3,10 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use vigil_core::models::{RunContext, RunOutput, RunStatus};
+use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::mpsc;
+use vigil_core::models::{RunContext, RunEvent, RunOutput, RunStatus};
 use vigil_core::runner::{Runner, Task};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,26 +26,46 @@ pub struct ShellRunner;
 impl Runner for ShellRunner {
     type Task = ShellTask;
 
-    async fn run(&self, task: &ShellTask, context: &RunContext) -> Result<RunOutput> {
+    async fn run(
+        &self,
+        task: &ShellTask,
+        context: &RunContext,
+        tx: mpsc::Sender<RunEvent>,
+    ) -> Result<RunOutput> {
         tracing::info!(
             run_id = %context.run_id,
             command = %task.command,
             "executing shell command"
         );
 
-        let output = tokio::process::Command::new("sh")
+        let mut child = tokio::process::Command::new("sh")
             .arg("-c")
             .arg(&task.command)
             .current_dir(&context.working_directory)
-            .output()
-            .await
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .context("failed to spawn shell command")?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stdout = child.stdout.take().unwrap();
+        let mut reader = BufReader::new(stdout).lines();
+        let mut stdout_lines = Vec::new();
+
+        while let Some(line) = reader.next_line().await? {
+            let _ = tx
+                .send(RunEvent::Output {
+                    text: format!("{line}\n"),
+                    metadata: None,
+                })
+                .await;
+            stdout_lines.push(line);
+        }
+
+        let output = child.wait_with_output().await?;
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         let log_content = serde_json::json!({
-            "stdout": stdout,
+            "stdout": stdout_lines.join("\n"),
             "stderr": stderr,
             "exit_code": output.status.code(),
         });
