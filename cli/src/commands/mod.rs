@@ -4,6 +4,7 @@ mod register;
 mod run;
 mod runs;
 mod schedule;
+mod show;
 mod status;
 mod unregister;
 mod unschedule;
@@ -68,6 +69,14 @@ pub enum Command {
     },
     /// Show task status and schedules
     Status,
+    /// Inspect a past run
+    Show {
+        /// Run ID (full UUID or short prefix)
+        run_id: String,
+        /// Output raw result without formatting
+        #[arg(long)]
+        raw: bool,
+    },
     /// Show recent task runs
     Runs {
         /// Filter by task name
@@ -136,6 +145,7 @@ pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
             ClaudeCommand::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
         },
         Command::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
+        Command::Show { run_id, raw } => show::handle(&run_id, raw, &store).await,
         Command::Runs { name, limit, verbose } => runs::handle(name.as_deref(), limit, verbose, &store).await,
     }
 }

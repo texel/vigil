@@ -3,6 +3,8 @@ use chrono::Utc;
 use vigil_core::models::RunStatus;
 use vigil_registry::Store;
 
+use crate::format::format_duration;
+
 pub async fn handle(name: Option<&str>, limit: u32, verbose: bool, store: &Store) -> Result<()> {
     let runs = store.list_recent_runs(name, limit).await?;
 
@@ -66,48 +68,4 @@ pub async fn handle(name: Option<&str>, limit: u32, verbose: bool, store: &Store
 
     println!("\n{} run(s)", runs.len());
     Ok(())
-}
-
-fn format_duration(dur: chrono::TimeDelta) -> String {
-    let total_secs = dur.num_milliseconds() as f64 / 1000.0;
-    if total_secs < 60.0 {
-        format!("{:.1}s", total_secs)
-    } else if total_secs < 3600.0 {
-        format!(
-            "{:.0}m {:.0}s",
-            (total_secs / 60.0).floor(),
-            total_secs % 60.0
-        )
-    } else {
-        let hours = (total_secs / 3600.0).floor();
-        let mins = ((total_secs % 3600.0) / 60.0).floor();
-        format!("{:.0}h {:.0}m", hours, mins)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::TimeDelta;
-
-    #[test]
-    fn test_format_duration_seconds() {
-        assert_eq!(format_duration(TimeDelta::milliseconds(500)), "0.5s");
-        assert_eq!(format_duration(TimeDelta::milliseconds(5000)), "5.0s");
-    }
-
-    #[test]
-    fn test_format_duration_minutes() {
-        assert_eq!(format_duration(TimeDelta::milliseconds(150_000)), "2m 30s");
-    }
-
-    #[test]
-    fn test_format_duration_hours() {
-        assert_eq!(format_duration(TimeDelta::milliseconds(4_500_000)), "1h 15m");
-    }
-
-    #[test]
-    fn test_format_duration_zero() {
-        assert_eq!(format_duration(TimeDelta::milliseconds(0)), "0.0s");
-    }
 }

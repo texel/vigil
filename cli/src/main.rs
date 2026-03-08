@@ -1,6 +1,7 @@
 //! vigil-cli — command-line interface for the vigil task scheduler.
 
 mod commands;
+mod format;
 
 use anyhow::{Context, Result};
 use clap::Parser;
