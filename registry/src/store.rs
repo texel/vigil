@@ -1,4 +1,4 @@
-use vigil_core::models::{RawTask, Run, ScheduledTask};
+use vigil_core::models::{RawTask, Run, ScheduledTask, TriggerSpec};
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use libsql::{params, Connection, Database};
@@ -112,6 +112,18 @@ impl Store {
             tasks.push(scheduled_task_from_row(&row)?);
         }
         Ok(tasks)
+    }
+
+    pub async fn update_trigger(&self, id: Uuid, trigger: Option<&TriggerSpec>) -> Result<()> {
+        let conn = self.conn().await?;
+        let trigger_json = trigger.map(|t| serde_json::to_string(t).unwrap());
+        conn.execute(
+            "UPDATE tasks SET trigger_json = ?1, updated_at = ?2 WHERE id = ?3",
+            params![trigger_json, Utc::now().to_rfc3339(), id.to_string()],
+        )
+        .await
+        .context("failed to update trigger")?;
+        Ok(())
     }
 
     pub async fn delete_task(&self, id: Uuid) -> Result<()> {
@@ -342,7 +354,7 @@ fn run_from_row(row: &libsql::Row) -> Result<Run> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vigil_core::models::{RunStatus, TriggerType};
+    use vigil_core::models::{DayFilter, RunStatus, TimeOfDay, TriggerSpec, TriggerType};
 
     async fn test_store() -> (Store, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -413,6 +425,27 @@ mod tests {
 
         store.delete_task(task.id).await.unwrap();
         assert!(store.get_task_by_name("doomed").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn update_trigger() {
+        let (store, _dir) = test_store().await;
+        let task = make_task("scheduled");
+        store.insert_task(&task).await.unwrap();
+
+        let trigger = TriggerSpec::Recurring {
+            times: vec![TimeOfDay { hour: 9, minute: 0 }],
+            days: Some(DayFilter::Weekdays),
+            timezone: None,
+        };
+        store.update_trigger(task.id, Some(&trigger)).await.unwrap();
+
+        let fetched = store.get_task_by_name("scheduled").await.unwrap().unwrap();
+        assert!(fetched.trigger.is_some());
+
+        store.update_trigger(task.id, None).await.unwrap();
+        let fetched = store.get_task_by_name("scheduled").await.unwrap().unwrap();
+        assert!(fetched.trigger.is_none());
     }
 
     #[tokio::test]
