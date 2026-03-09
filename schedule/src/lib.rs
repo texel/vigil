@@ -31,69 +31,59 @@ pub enum TriggerSpec {
 impl TriggerSpec {
     /// The times of day this trigger fires. Empty for interval-based schedules.
     pub fn times_of_day(&self) -> &[TimeOfDay] {
-        match self {
-            TriggerSpec::RRule { times, .. } => times,
-        }
+        let TriggerSpec::RRule { times, .. } = self;
+        times
     }
 
     /// The days of week this trigger fires, if constrained.
     /// `None` means every day (daily). Returns expanded days for Weekdays/Weekends.
     pub fn days_of_week(&self) -> Option<Vec<DayOfWeek>> {
-        match self {
-            TriggerSpec::RRule { days, .. } => days.as_ref().map(|d| match d {
-                DayFilter::Weekdays => vec![
-                    DayOfWeek::Monday,
-                    DayOfWeek::Tuesday,
-                    DayOfWeek::Wednesday,
-                    DayOfWeek::Thursday,
-                    DayOfWeek::Friday,
-                ],
-                DayFilter::Weekends => vec![DayOfWeek::Saturday, DayOfWeek::Sunday],
-                DayFilter::Days(days) => days.clone(),
-            }),
-        }
+        let TriggerSpec::RRule { days, .. } = self;
+        days.as_ref().map(|d| match d {
+            DayFilter::Weekdays => vec![
+                DayOfWeek::Monday,
+                DayOfWeek::Tuesday,
+                DayOfWeek::Wednesday,
+                DayOfWeek::Thursday,
+                DayOfWeek::Friday,
+            ],
+            DayFilter::Weekends => vec![DayOfWeek::Saturday, DayOfWeek::Sunday],
+            DayFilter::Days(days) => days.clone(),
+        })
     }
 
     /// The raw `DayFilter` if this is a recurring schedule with day constraints.
     pub fn day_filter(&self) -> Option<&DayFilter> {
-        match self {
-            TriggerSpec::RRule { days, .. } => days.as_ref(),
-        }
+        let TriggerSpec::RRule { days, .. } = self;
+        days.as_ref()
     }
 
     /// For interval-based schedules, returns the interval duration.
     pub fn interval(&self) -> Option<Duration> {
-        match self {
-            TriggerSpec::RRule { interval_secs, .. } => {
-                interval_secs.map(Duration::from_secs)
-            }
-        }
+        let TriggerSpec::RRule { interval_secs, .. } = self;
+        interval_secs.map(Duration::from_secs)
     }
 
     /// The frequency of this schedule.
     pub fn frequency(&self) -> Frequency {
-        match self {
-            TriggerSpec::RRule {
-                interval_secs,
-                days,
-                ..
-            } => {
-                if interval_secs.is_some() {
-                    Frequency::Hourly // interval-based
-                } else if days.is_some() {
-                    Frequency::Weekly
-                } else {
-                    Frequency::Daily
-                }
-            }
+        let TriggerSpec::RRule {
+            interval_secs,
+            days,
+            ..
+        } = self;
+        if interval_secs.is_some() {
+            Frequency::Hourly // interval-based
+        } else if days.is_some() {
+            Frequency::Weekly
+        } else {
+            Frequency::Daily
         }
     }
 
     /// The raw RRULE string.
     pub fn to_rrule_string(&self) -> &str {
-        match self {
-            TriggerSpec::RRule { rrule, .. } => rrule,
-        }
+        let TriggerSpec::RRule { rrule, .. } = self;
+        rrule
     }
 }
 
@@ -108,41 +98,38 @@ impl FromStr for TriggerSpec {
 
 impl fmt::Display for TriggerSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TriggerSpec::RRule {
-                times,
-                days,
-                interval_secs,
-                ..
-            } => {
-                if let Some(secs) = interval_secs {
-                    if secs % 3600 == 0 {
-                        let n = secs / 3600;
-                        let unit = if n == 1 { "hour" } else { "hours" };
-                        write!(f, "every {n} {unit}")
-                    } else if secs % 60 == 0 {
-                        let n = secs / 60;
-                        let unit = if n == 1 { "minute" } else { "minutes" };
-                        write!(f, "every {n} {unit}")
-                    } else {
-                        let unit = if *secs == 1 { "second" } else { "seconds" };
-                        write!(f, "every {secs} {unit}")
-                    }
-                } else {
-                    if let Some(days) = days {
-                        write!(f, "{days}")?;
-                    } else {
-                        write!(f, "daily")?;
-                    }
-                    if !times.is_empty() {
-                        let time_strs: Vec<String> =
-                            times.iter().map(|t| t.to_string()).collect();
-                        write!(f, " at {}", time_strs.join(","))?;
-                    }
-                    Ok(())
-                }
-            }
+        let TriggerSpec::RRule {
+            times,
+            days,
+            interval_secs,
+            ..
+        } = self;
+
+        if let Some(secs) = interval_secs {
+            return if secs % 3600 == 0 {
+                let n = secs / 3600;
+                let unit = if n == 1 { "hour" } else { "hours" };
+                write!(f, "every {n} {unit}")
+            } else if secs % 60 == 0 {
+                let n = secs / 60;
+                let unit = if n == 1 { "minute" } else { "minutes" };
+                write!(f, "every {n} {unit}")
+            } else {
+                let unit = if *secs == 1 { "second" } else { "seconds" };
+                write!(f, "every {secs} {unit}")
+            };
         }
+
+        match days {
+            Some(days) => write!(f, "{days}")?,
+            None => write!(f, "daily")?,
+        }
+        if !times.is_empty() {
+            let time_strs: Vec<String> =
+                times.iter().map(|t| t.to_string()).collect();
+            write!(f, " at {}", time_strs.join(","))?;
+        }
+        Ok(())
     }
 }
 
@@ -166,7 +153,8 @@ pub fn deserialize_trigger_compat(json: &str) -> Result<TriggerSpec> {
         )?;
         let days: Option<DayFilter> = recurring
             .get("days")
-            .and_then(|v| if v.is_null() { None } else { Some(v.clone()) })
+            .filter(|v| !v.is_null())
+            .cloned()
             .map(serde_json::from_value)
             .transpose()?;
         let rrule = rrule_convert::build_recurring_rrule(&times, days.as_ref());

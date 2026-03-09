@@ -5,33 +5,39 @@ pub(crate) fn build_recurring_rrule(
     times: &[TimeOfDay],
     days: Option<&DayFilter>,
 ) -> String {
-    let mut parts = Vec::new();
+    let mut parts: Vec<&str> = Vec::new();
 
+    let byday_str;
     match days {
         Some(DayFilter::Weekdays) => {
-            parts.push("FREQ=WEEKLY".to_string());
-            parts.push("BYDAY=MO,TU,WE,TH,FR".to_string());
+            parts.push("FREQ=WEEKLY");
+            parts.push("BYDAY=MO,TU,WE,TH,FR");
         }
         Some(DayFilter::Weekends) => {
-            parts.push("FREQ=WEEKLY".to_string());
-            parts.push("BYDAY=SA,SU".to_string());
+            parts.push("FREQ=WEEKLY");
+            parts.push("BYDAY=SA,SU");
         }
         Some(DayFilter::Days(day_list)) => {
-            parts.push("FREQ=WEEKLY".to_string());
+            parts.push("FREQ=WEEKLY");
             let byday: Vec<&str> = day_list.iter().map(day_to_rrule).collect();
-            parts.push(format!("BYDAY={}", byday.join(",")));
+            byday_str = format!("BYDAY={}", byday.join(","));
+            parts.push(&byday_str);
         }
         None => {
-            parts.push("FREQ=DAILY".to_string());
+            parts.push("FREQ=DAILY");
         }
     }
 
     // Encode times as BYHOUR/BYMINUTE if multiple, otherwise we rely on DTSTART
+    let byhour_str;
+    let byminute_str;
     if times.len() > 1 {
         let hours: Vec<String> = times.iter().map(|t| t.hour.to_string()).collect();
         let minutes: Vec<String> = times.iter().map(|t| t.minute.to_string()).collect();
-        parts.push(format!("BYHOUR={}", hours.join(",")));
-        parts.push(format!("BYMINUTE={}", minutes.join(",")));
+        byhour_str = format!("BYHOUR={}", hours.join(","));
+        byminute_str = format!("BYMINUTE={}", minutes.join(","));
+        parts.push(&byhour_str);
+        parts.push(&byminute_str);
     }
 
     format!("RRULE:{}", parts.join(";"))
