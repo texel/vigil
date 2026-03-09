@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 vigil-core.workspace = true
+vigil-schedule.workspace = true
 vigil-registry.workspace = true
 vigil-runner-shell.workspace = true
 vigil-runner-claude.workspace = true

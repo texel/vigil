@@ -6,8 +6,8 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use vigil_core::models::{DayFilter, DayOfWeek, TriggerSpec};
 use vigil_core::scheduler::{ScheduleStatus, Scheduler};
+use vigil_schedule::{DayOfWeek, TriggerSpec};
 
 fn label(name: &str) -> String {
     format!("com.vigil.task.{name}")
@@ -49,50 +49,42 @@ fn launchd_weekday(day: &DayOfWeek) -> u8 {
     }
 }
 
-fn build_calendar_intervals(
-    times: &[vigil_core::models::TimeOfDay],
-    days: Option<&DayFilter>,
-) -> Vec<CalendarInterval> {
-    let weekdays: Option<Vec<u8>> = days.map(|d| match d {
-        DayFilter::Weekdays => vec![1, 2, 3, 4, 5],
-        DayFilter::Weekends => vec![0, 6],
-        DayFilter::Days(days) => days.iter().map(launchd_weekday).collect(),
-    });
+fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let log_path = format!("{home}/.vigil/logs/{name}/launchd.log");
 
-    let mut intervals = Vec::new();
-    for time in times {
-        match &weekdays {
-            Some(days) => {
-                for &day in days {
+    let (start_interval, start_calendar_interval) = if let Some(interval) = trigger.interval() {
+        (Some(interval.as_secs()), None)
+    } else {
+        let times = trigger.times_of_day();
+        let days = trigger.days_of_week();
+
+        let weekdays: Option<Vec<u8>> = days.as_ref().map(|d| {
+            d.iter().map(launchd_weekday).collect()
+        });
+
+        let mut intervals = Vec::new();
+        for time in times {
+            match &weekdays {
+                Some(days) => {
+                    for &day in days {
+                        intervals.push(CalendarInterval {
+                            weekday: Some(day),
+                            hour: time.hour,
+                            minute: time.minute,
+                        });
+                    }
+                }
+                None => {
                     intervals.push(CalendarInterval {
-                        weekday: Some(day),
+                        weekday: None,
                         hour: time.hour,
                         minute: time.minute,
                     });
                 }
             }
-            None => {
-                intervals.push(CalendarInterval {
-                    weekday: None,
-                    hour: time.hour,
-                    minute: time.minute,
-                });
-            }
         }
-    }
-    intervals
-}
-
-fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let log_path = format!("{home}/.vigil/logs/{name}/launchd.log");
-
-    let (start_interval, start_calendar_interval) = match trigger {
-        TriggerSpec::Recurring { times, days, .. } => {
-            let intervals = build_calendar_intervals(times, days.as_ref());
-            (None, Some(intervals))
-        }
-        TriggerSpec::Interval { every } => (Some(every.as_secs()), None),
+        (None, Some(intervals))
     };
 
     let plist = LaunchdPlist {
@@ -217,15 +209,38 @@ impl Scheduler for LaunchdScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vigil_core::models::*;
+    use vigil_schedule::{DayFilter, TimeOfDay};
+
+    fn recurring(times: Vec<TimeOfDay>, days: Option<DayFilter>) -> TriggerSpec {
+        let expr = match &days {
+            None => format!("daily at {}", times[0]),
+            Some(DayFilter::Weekdays) => format!("weekdays at {}", times[0]),
+            Some(DayFilter::Weekends) => format!("weekends at {}", times[0]),
+            Some(DayFilter::Days(d)) => {
+                let day_strs: Vec<String> = d.iter().map(|d| d.to_string()).collect();
+                format!("{} at {}", day_strs.join(","), times[0])
+            }
+        };
+        expr.parse().unwrap()
+    }
+
+    fn interval(secs: u64) -> TriggerSpec {
+        let expr = if secs % 3600 == 0 {
+            format!("every {} hours", secs / 3600)
+        } else if secs % 60 == 0 {
+            format!("every {} minutes", secs / 60)
+        } else {
+            format!("every {secs} seconds")
+        };
+        expr.parse().unwrap()
+    }
 
     #[test]
     fn plist_recurring_weekdays() {
-        let trigger = TriggerSpec::Recurring {
-            times: vec![TimeOfDay { hour: 9, minute: 0 }],
-            days: Some(DayFilter::Weekdays),
-            timezone: None,
-        };
+        let trigger = recurring(
+            vec![TimeOfDay { hour: 9, minute: 0 }],
+            Some(DayFilter::Weekdays),
+        );
         let plist = generate_plist("daily-briefing", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<string>com.vigil.task.daily-briefing</string>"));
         assert!(plist.contains("<string>run</string>"));
@@ -236,14 +251,13 @@ mod tests {
 
     #[test]
     fn plist_recurring_daily() {
-        let trigger = TriggerSpec::Recurring {
-            times: vec![TimeOfDay {
+        let trigger = recurring(
+            vec![TimeOfDay {
                 hour: 8,
                 minute: 30,
             }],
-            days: None,
-            timezone: None,
-        };
+            None,
+        );
         let plist = generate_plist("morning-task", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>StartCalendarInterval</key>"));
         assert!(plist.contains("<integer>8</integer>"));
@@ -254,9 +268,7 @@ mod tests {
 
     #[test]
     fn plist_interval() {
-        let trigger = TriggerSpec::Interval {
-            every: std::time::Duration::from_secs(3600),
-        };
+        let trigger = interval(3600);
         let plist = generate_plist("health-check", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>StartInterval</key>"));
         assert!(plist.contains("<integer>3600</integer>"));
@@ -264,18 +276,14 @@ mod tests {
 
     #[test]
     fn plist_has_quiet_flag() {
-        let trigger = TriggerSpec::Interval {
-            every: std::time::Duration::from_secs(60),
-        };
+        let trigger = interval(60);
         let plist = generate_plist("test", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<string>--quiet</string>"));
     }
 
     #[test]
     fn plist_has_log_paths() {
-        let trigger = TriggerSpec::Interval {
-            every: std::time::Duration::from_secs(60),
-        };
+        let trigger = interval(60);
         let plist = generate_plist("my-task", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>StandardOutPath</key>"));
         assert!(plist.contains("<key>StandardErrorPath</key>"));
@@ -284,11 +292,13 @@ mod tests {
 
     #[test]
     fn plist_is_valid_xml() {
-        let trigger = TriggerSpec::Recurring {
-            times: vec![TimeOfDay { hour: 9, minute: 0 }],
-            days: Some(DayFilter::Days(vec![DayOfWeek::Monday, DayOfWeek::Friday])),
-            timezone: None,
-        };
+        let trigger = recurring(
+            vec![TimeOfDay { hour: 9, minute: 0 }],
+            Some(DayFilter::Days(vec![
+                DayOfWeek::Monday,
+                DayOfWeek::Friday,
+            ])),
+        );
         let xml = generate_plist("xml-test", &trigger, "/usr/local/bin/vigil").unwrap();
         // Should parse back successfully
         let parsed: LaunchdPlist = plist::from_bytes(xml.as_bytes()).unwrap();

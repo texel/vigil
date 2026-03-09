@@ -1,4 +1,5 @@
-use vigil_core::models::{RawTask, Run, ScheduledTask, TriggerSpec};
+use vigil_core::models::{RawTask, Run, ScheduledTask};
+use vigil_schedule::TriggerSpec;
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use libsql::{params, Connection, Database};
@@ -310,7 +311,7 @@ fn scheduled_task_from_row(row: &libsql::Row) -> Result<ScheduledTask<RawTask>> 
             json: config_json,
         },
         trigger: trigger_json
-            .map(|j| serde_json::from_str(&j))
+            .map(|j| vigil_schedule::deserialize_trigger_compat(&j))
             .transpose()
             .context("invalid trigger JSON")?,
         working_directory: working_directory.map(PathBuf::from),
@@ -354,7 +355,8 @@ fn run_from_row(row: &libsql::Row) -> Result<Run> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vigil_core::models::{DayFilter, RunStatus, TimeOfDay, TriggerSpec, TriggerType};
+    use vigil_core::models::{RunStatus, TriggerType};
+    use vigil_schedule::TriggerSpec;
 
     async fn test_store() -> (Store, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -433,11 +435,7 @@ mod tests {
         let task = make_task("scheduled");
         store.insert_task(&task).await.unwrap();
 
-        let trigger = TriggerSpec::Recurring {
-            times: vec![TimeOfDay { hour: 9, minute: 0 }],
-            days: Some(DayFilter::Weekdays),
-            timezone: None,
-        };
+        let trigger: TriggerSpec = "weekdays at 09:00".parse().unwrap();
         store.update_trigger(task.id, Some(&trigger)).await.unwrap();
 
         let fetched = store.get_task_by_name("scheduled").await.unwrap().unwrap();

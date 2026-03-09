@@ -1,4 +1,4 @@
-use crate::models::TriggerSpec;
+use vigil_schedule::TriggerSpec;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::fmt;

@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 vigil-core.workspace = true
+vigil-schedule.workspace = true
 anyhow.workspace = true
 plist.workspace = true
 serde.workspace = true

@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "runner-shell", "runner-claude", "registry", "scheduler-launchd", "cli"]
+members = ["core", "runner-shell", "runner-claude", "registry", "scheduler-launchd", "schedule", "cli"]
 resolver = "3"
 
 [workspace.package]
@@ -8,6 +8,7 @@ edition = "2024"
 
 [workspace.dependencies]
 vigil-core = { path = "core" }
+vigil-schedule = { path = "schedule" }
 vigil-runner-shell = { path = "runner-shell" }
 vigil-runner-claude = { path = "runner-claude" }
 vigil-registry = { path = "registry" }

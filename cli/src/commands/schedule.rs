@@ -1,11 +1,11 @@
 use anyhow::Result;
-use vigil_core::trigger::parse_trigger;
 use vigil_registry::Store;
+use vigil_schedule::TriggerSpec;
 use vigil_scheduler_launchd::LaunchdScheduler;
 
 pub async fn handle(name: &str, trigger_words: &[String], store: &Store) -> Result<()> {
     let trigger_expr = trigger_words.join(" ");
-    let trigger = parse_trigger(&trigger_expr)?;
+    let trigger: TriggerSpec = trigger_expr.parse()?;
 
     let task = store
         .get_task_by_name(name)

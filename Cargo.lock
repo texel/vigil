@@ -2476,6 +2476,7 @@ dependencies = [
  "vigil-registry",
  "vigil-runner-claude",
  "vigil-runner-shell",
+ "vigil-schedule",
  "vigil-scheduler-launchd",
 ]
 
@@ -2491,6 +2492,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
+ "vigil-schedule",
 ]
 
 [[package]]
@@ -2509,6 +2511,7 @@ dependencies = [
  "vigil-core",
  "vigil-runner-claude",
  "vigil-runner-shell",
+ "vigil-schedule",
 ]
 
 [[package]]
@@ -2540,6 +2543,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vigil-schedule"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "derive_more",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "vigil-scheduler-launchd"
 version = "0.1.0"
 dependencies = [
@@ -2551,6 +2565,7 @@ dependencies = [
  "tokio",
  "tracing",
  "vigil-core",
+ "vigil-schedule",
 ]
 
 [[package]]
