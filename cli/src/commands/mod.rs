@@ -1,4 +1,5 @@
 mod claude;
+mod inspect;
 mod list;
 mod register;
 mod run;
@@ -77,6 +78,11 @@ pub enum Command {
         #[arg(long)]
         raw: bool,
     },
+    /// Inspect a task: config, schedule, and recent runs
+    Inspect {
+        /// Task name or ID prefix
+        name_or_id: String,
+    },
     /// Show recent task runs
     Runs {
         /// Filter by task name
@@ -145,6 +151,7 @@ pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
             ClaudeCommand::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
         },
         Command::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
+        Command::Inspect { name_or_id } => inspect::handle(&name_or_id, &store).await,
         Command::Show { run_id, raw } => show::handle(&run_id, raw, &store).await,
         Command::Runs { name, limit, verbose } => runs::handle(name.as_deref(), limit, verbose, &store).await,
     }

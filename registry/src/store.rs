@@ -250,6 +250,29 @@ impl Store {
         }
     }
 
+    pub async fn get_task_by_id_prefix(&self, prefix: &str) -> Result<Option<ScheduledTask<RawTask>>> {
+        let conn = self.conn().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, name, runner_type, config_json, trigger_json, working_directory, enabled, created_at, updated_at
+                 FROM tasks WHERE id LIKE ?1",
+                params![format!("{prefix}%")],
+            )
+            .await
+            .context("failed to query task by prefix")?;
+
+        let first = match rows.next().await? {
+            Some(row) => scheduled_task_from_row(&row)?,
+            None => return Ok(None),
+        };
+
+        if rows.next().await?.is_some() {
+            bail!("ambiguous task ID prefix '{prefix}' — matches multiple tasks, use more characters");
+        }
+
+        Ok(Some(first))
+    }
+
     pub async fn get_run_by_id_prefix(&self, prefix: &str) -> Result<Option<Run>> {
         let conn = self.conn().await?;
         let mut rows = conn
