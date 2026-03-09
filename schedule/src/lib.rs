@@ -5,6 +5,8 @@ mod rrule_convert;
 pub use models::{DayFilter, DayOfWeek, Frequency, TimeOfDay};
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use rrule::RRuleSet;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -21,6 +23,11 @@ pub enum TriggerSpec {
     /// Time-based recurring schedule, internally stored as RRULE.
     RRule {
         rrule: String,
+        /// RFC 5545 DTSTART string (e.g. `"20200101T090000Z"`). Required for
+        /// RRULE evaluation. Defaults to empty for backward compat with old DB rows;
+        /// `next_occurrence()` synthesizes one when missing.
+        #[serde(default)]
+        dtstart: String,
         times: Vec<TimeOfDay>,
         days: Option<DayFilter>,
         /// For interval-based schedules, the interval in seconds.
@@ -84,6 +91,42 @@ impl TriggerSpec {
     pub fn to_rrule_string(&self) -> &str {
         let TriggerSpec::RRule { rrule, .. } = self;
         rrule
+    }
+
+    /// The DTSTART string for this schedule.
+    pub fn dtstart(&self) -> &str {
+        let TriggerSpec::RRule { dtstart, .. } = self;
+        dtstart
+    }
+
+    /// Compute the next occurrence of this schedule after `after`.
+    ///
+    /// Parses the stored RRULE + DTSTART via the `rrule` crate and returns the
+    /// first occurrence strictly after the given time.
+    pub fn next_occurrence(&self, after: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        let TriggerSpec::RRule {
+            rrule,
+            dtstart,
+            times,
+            ..
+        } = self;
+
+        let dtstart_str = if dtstart.is_empty() {
+            rrule_convert::default_dtstart(times)
+        } else {
+            dtstart.clone()
+        };
+
+        let input = format!("DTSTART:{dtstart_str}\n{rrule}");
+        let rrule_set: RRuleSet = input.parse().ok()?;
+
+        rrule_set
+            .after(after.with_timezone(&rrule::Tz::UTC))
+            .all(1)
+            .dates
+            .into_iter()
+            .next()
+            .map(|dt| dt.with_timezone(&Utc))
     }
 }
 
@@ -158,8 +201,10 @@ pub fn deserialize_trigger_compat(json: &str) -> Result<TriggerSpec> {
             .map(serde_json::from_value)
             .transpose()?;
         let rrule = rrule_convert::build_recurring_rrule(&times, days.as_ref());
+        let dtstart = rrule_convert::default_dtstart(&times);
         return Ok(TriggerSpec::RRule {
             rrule,
+            dtstart,
             times,
             days,
             interval_secs: None,
@@ -175,8 +220,10 @@ pub fn deserialize_trigger_compat(json: &str) -> Result<TriggerSpec> {
             .and_then(|v| v.as_u64())
             .ok_or_else(|| anyhow::anyhow!("legacy Interval missing 'secs'"))?;
         let rrule = rrule_convert::build_interval_rrule(secs);
+        let dtstart = rrule_convert::default_dtstart(&[]);
         return Ok(TriggerSpec::RRule {
             rrule,
+            dtstart,
             times: vec![],
             days: None,
             interval_secs: Some(secs),
@@ -189,6 +236,7 @@ pub fn deserialize_trigger_compat(json: &str) -> Result<TriggerSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn from_str_daily() {
@@ -259,5 +307,62 @@ mod tests {
         let t2: TriggerSpec = serde_json::from_str(&json).unwrap();
         assert_eq!(t2.times_of_day()[0].hour, 9);
         assert_eq!(t2.to_rrule_string(), t.to_rrule_string());
+    }
+
+    #[test]
+    fn next_occurrence_daily() {
+        let t: TriggerSpec = "daily at 09:00".parse().unwrap();
+        // Ask for next after 2026-03-08 08:00 UTC → should be 2026-03-08 09:00
+        let after = Utc.with_ymd_and_hms(2026, 3, 8, 8, 0, 0).unwrap();
+        let next = t.next_occurrence(after).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 8, 9, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn next_occurrence_daily_after_time() {
+        let t: TriggerSpec = "daily at 09:00".parse().unwrap();
+        // Ask for next after 2026-03-08 10:00 UTC → should be 2026-03-09 09:00
+        let after = Utc.with_ymd_and_hms(2026, 3, 8, 10, 0, 0).unwrap();
+        let next = t.next_occurrence(after).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 9, 9, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn next_occurrence_weekly_with_days() {
+        let t: TriggerSpec = "mon,wed,fri at 14:00".parse().unwrap();
+        // 2026-03-08 is a Sunday → next should be Monday 2026-03-09 14:00
+        let after = Utc.with_ymd_and_hms(2026, 3, 8, 12, 0, 0).unwrap();
+        let next = t.next_occurrence(after).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 9, 14, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn next_occurrence_interval() {
+        let t: TriggerSpec = "every 2 hours".parse().unwrap();
+        let after = Utc.with_ymd_and_hms(2026, 3, 8, 10, 30, 0).unwrap();
+        let next = t.next_occurrence(after).unwrap();
+        // Interval-based: every 2 hours from DTSTART midnight → 0, 2, 4, 6, 8, 10, 12...
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 8, 12, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn next_occurrence_midnight_edge() {
+        let t: TriggerSpec = "daily at midnight".parse().unwrap();
+        // Just before midnight
+        let after = Utc.with_ymd_and_hms(2026, 3, 8, 23, 59, 0).unwrap();
+        let next = t.next_occurrence(after).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 9, 0, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn next_occurrence_missing_dtstart_compat() {
+        // Simulate old DB row without dtstart field
+        let json = r#"{"type":"RRule","rrule":"RRULE:FREQ=DAILY","times":[{"hour":9,"minute":0}],"days":null,"interval_secs":null}"#;
+        let t: TriggerSpec = serde_json::from_str(json).unwrap();
+        assert!(t.dtstart().is_empty());
+        // Should still compute next_occurrence by synthesizing a dtstart
+        let after = Utc.with_ymd_and_hms(2026, 3, 8, 8, 0, 0).unwrap();
+        let next = t.next_occurrence(after);
+        assert!(next.is_some());
     }
 }

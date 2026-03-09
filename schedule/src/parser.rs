@@ -1,6 +1,6 @@
 use crate::TriggerSpec;
 use crate::models::{DayFilter, DayOfWeek, TimeOfDay};
-use crate::rrule_convert::{build_interval_rrule, build_recurring_rrule};
+use crate::rrule_convert::{build_interval_rrule, build_recurring_rrule, default_dtstart};
 use anyhow::{Result, bail};
 
 /// Parse a trigger expression string into a [`TriggerSpec`].
@@ -33,10 +33,13 @@ pub(crate) fn parse_trigger(input: &str) -> Result<TriggerSpec> {
         let time_part = &input[at_pos + 4..];
         let time: TimeOfDay = time_part.parse()?;
         let days = parse_days(days_part)?;
-        let rrule = build_recurring_rrule(&[time], days.as_ref());
+        let times = vec![time];
+        let rrule = build_recurring_rrule(&times, days.as_ref());
+        let dtstart = default_dtstart(&times);
         return Ok(TriggerSpec::RRule {
             rrule,
-            times: vec![time],
+            dtstart,
+            times,
             days,
             interval_secs: None,
         });
@@ -65,8 +68,10 @@ fn parse_interval(s: &str) -> Result<TriggerSpec> {
         unit => bail!("unknown time unit: '{unit}'. Use hours, minutes, or seconds"),
     };
     let rrule = build_interval_rrule(secs);
+    let dtstart = default_dtstart(&[]);
     Ok(TriggerSpec::RRule {
         rrule,
+        dtstart,
         times: vec![],
         days: None,
         interval_secs: Some(secs),

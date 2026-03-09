@@ -1,5 +1,17 @@
 use crate::models::{DayFilter, DayOfWeek, TimeOfDay};
 
+/// Synthesize a DTSTART string for schedules that don't have one stored.
+///
+/// Uses a fixed past date (2020-01-01, a Wednesday) with the first scheduled time,
+/// or midnight if no times are specified. This ensures RRULE evaluation works for
+/// legacy DB rows that predate the `dtstart` field.
+pub(crate) fn default_dtstart(times: &[TimeOfDay]) -> String {
+    match times.first() {
+        Some(t) => format!("20200101T{:02}{:02}00Z", t.hour, t.minute),
+        None => "20200101T000000Z".to_string(),
+    }
+}
+
 /// Build an RRULE string for a recurring schedule.
 pub(crate) fn build_recurring_rrule(
     times: &[TimeOfDay],
