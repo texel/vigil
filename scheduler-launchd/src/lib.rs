@@ -18,6 +18,8 @@ fn label(name: &str) -> String {
 struct LaunchdPlist {
     label: String,
     program_arguments: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    environment_variables: Option<std::collections::HashMap<String, String>>,
     standard_out_path: String,
     standard_error_path: String,
     run_at_load: bool,
@@ -87,6 +89,12 @@ fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<
         (None, Some(intervals))
     };
 
+    let environment_variables = std::env::var("PATH").ok().map(|path| {
+        let mut m = std::collections::HashMap::new();
+        m.insert("PATH".to_string(), path);
+        m
+    });
+
     let plist = LaunchdPlist {
         label: label(name),
         program_arguments: vec![
@@ -95,6 +103,7 @@ fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<
             name.to_string(),
             "--quiet".to_string(),
         ],
+        environment_variables,
         standard_out_path: log_path.clone(),
         standard_error_path: log_path,
         run_at_load: false,
@@ -291,6 +300,14 @@ mod tests {
     }
 
     #[test]
+    fn plist_includes_path_env() {
+        let trigger = interval(60);
+        let plist = generate_plist("test", &trigger, "/usr/local/bin/vigil").unwrap();
+        assert!(plist.contains("<key>EnvironmentVariables</key>"));
+        assert!(plist.contains("<key>PATH</key>"));
+    }
+
+    #[test]
     fn plist_is_valid_xml() {
         let trigger = recurring(
             vec![TimeOfDay { hour: 9, minute: 0 }],
@@ -304,6 +321,8 @@ mod tests {
         let parsed: LaunchdPlist = plist::from_bytes(xml.as_bytes()).unwrap();
         assert_eq!(parsed.label, "com.vigil.task.xml-test");
         assert_eq!(parsed.program_arguments.len(), 4);
+        assert!(parsed.environment_variables.is_some());
+        assert!(parsed.environment_variables.unwrap().contains_key("PATH"));
         let intervals = parsed.start_calendar_interval.unwrap();
         assert_eq!(intervals.len(), 2);
         assert_eq!(intervals[0].weekday, Some(1)); // Monday
