@@ -15,14 +15,14 @@ pub async fn handle(name: Option<&str>, limit: u32, verbose: bool, store: &Store
 
     if verbose {
         println!(
-            "{:<38} {:<14} {:<10} {:<21} {:<10} {:#}",
-            "RUN ID", "TASK", "STATUS", "STARTED", "DURATION", "EXIT"
+            "{:<38} {:<14} {:<10} {:<21} {:<10} EXIT",
+            "RUN ID", "TASK", "STATUS", "STARTED", "DURATION"
         );
         println!("{}", "\u{2500}".repeat(103));
     } else {
         println!(
-            "{:<10} {:<14} {:<10} {:<21} {:<10} {:#}",
-            "RUN ID", "TASK", "STATUS", "STARTED", "DURATION", "EXIT"
+            "{:<10} {:<14} {:<10} {:<21} {:<10} EXIT",
+            "RUN ID", "TASK", "STATUS", "STARTED", "DURATION"
         );
         println!("{}", "\u{2500}".repeat(75));
     }

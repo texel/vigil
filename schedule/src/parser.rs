@@ -85,8 +85,10 @@ fn parse_days(s: &str) -> Result<Option<DayFilter>> {
         "weekdays" => Ok(Some(DayFilter::Weekdays)),
         "weekends" => Ok(Some(DayFilter::Weekends)),
         _ => {
-            let days: Result<Vec<DayOfWeek>> =
-                s.split(',').map(|d| d.trim().parse::<DayOfWeek>()).collect();
+            let days: Result<Vec<DayOfWeek>> = s
+                .split(',')
+                .map(|d| d.trim().parse::<DayOfWeek>())
+                .collect();
             let days = days?;
             if days.is_empty() {
                 bail!("no days specified");

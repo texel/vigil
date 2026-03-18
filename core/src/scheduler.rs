@@ -1,7 +1,7 @@
-use vigil_schedule::TriggerSpec;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::fmt;
+use vigil_schedule::TriggerSpec;
 
 #[async_trait]
 pub trait Scheduler: Send + Sync {

@@ -54,7 +54,10 @@ mod tests {
 
     #[test]
     fn test_format_duration_hours() {
-        assert_eq!(format_duration(TimeDelta::milliseconds(4_500_000)), "1h 15m");
+        assert_eq!(
+            format_duration(TimeDelta::milliseconds(4_500_000)),
+            "1h 15m"
+        );
     }
 
     #[test]

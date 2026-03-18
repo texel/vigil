@@ -13,10 +13,7 @@ pub(crate) fn default_dtstart(times: &[TimeOfDay]) -> String {
 }
 
 /// Build an RRULE string for a recurring schedule.
-pub(crate) fn build_recurring_rrule(
-    times: &[TimeOfDay],
-    days: Option<&DayFilter>,
-) -> String {
+pub(crate) fn build_recurring_rrule(times: &[TimeOfDay], days: Option<&DayFilter>) -> String {
     let mut parts: Vec<&str> = Vec::new();
 
     let byday_str;
@@ -57,10 +54,10 @@ pub(crate) fn build_recurring_rrule(
 
 /// Build an RRULE string for an interval schedule.
 pub(crate) fn build_interval_rrule(seconds: u64) -> String {
-    if seconds % 3600 == 0 {
+    if seconds.is_multiple_of(3600) {
         let hours = seconds / 3600;
         format!("RRULE:FREQ=HOURLY;INTERVAL={hours}")
-    } else if seconds % 60 == 0 {
+    } else if seconds.is_multiple_of(60) {
         let mins = seconds / 60;
         format!("RRULE:FREQ=MINUTELY;INTERVAL={mins}")
     } else {
@@ -86,10 +83,7 @@ mod tests {
 
     #[test]
     fn recurring_daily() {
-        let rrule = build_recurring_rrule(
-            &[TimeOfDay { hour: 9, minute: 0 }],
-            None,
-        );
+        let rrule = build_recurring_rrule(&[TimeOfDay { hour: 9, minute: 0 }], None);
         assert_eq!(rrule, "RRULE:FREQ=DAILY");
     }
 
@@ -105,7 +99,10 @@ mod tests {
     #[test]
     fn recurring_weekends() {
         let rrule = build_recurring_rrule(
-            &[TimeOfDay { hour: 10, minute: 0 }],
+            &[TimeOfDay {
+                hour: 10,
+                minute: 0,
+            }],
             Some(&DayFilter::Weekends),
         );
         assert_eq!(rrule, "RRULE:FREQ=WEEKLY;BYDAY=SA,SU");
@@ -114,7 +111,10 @@ mod tests {
     #[test]
     fn recurring_specific_days() {
         let rrule = build_recurring_rrule(
-            &[TimeOfDay { hour: 14, minute: 0 }],
+            &[TimeOfDay {
+                hour: 14,
+                minute: 0,
+            }],
             Some(&DayFilter::Days(vec![
                 DayOfWeek::Monday,
                 DayOfWeek::Wednesday,
@@ -131,7 +131,10 @@ mod tests {
 
     #[test]
     fn interval_minutes() {
-        assert_eq!(build_interval_rrule(1800), "RRULE:FREQ=MINUTELY;INTERVAL=30");
+        assert_eq!(
+            build_interval_rrule(1800),
+            "RRULE:FREQ=MINUTELY;INTERVAL=30"
+        );
     }
 
     #[test]

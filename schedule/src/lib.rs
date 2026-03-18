@@ -168,8 +168,7 @@ impl fmt::Display for TriggerSpec {
             None => write!(f, "daily")?,
         }
         if !times.is_empty() {
-            let time_strs: Vec<String> =
-                times.iter().map(|t| t.to_string()).collect();
+            let time_strs: Vec<String> = times.iter().map(|t| t.to_string()).collect();
             write!(f, " at {}", time_strs.join(","))?;
         }
         Ok(())
@@ -191,9 +190,8 @@ pub fn deserialize_trigger_compat(json: &str) -> Result<TriggerSpec> {
     let legacy: serde_json::Value = serde_json::from_str(json)?;
 
     if let Some(recurring) = legacy.get("Recurring") {
-        let times: Vec<TimeOfDay> = serde_json::from_value(
-            recurring.get("times").cloned().unwrap_or_default(),
-        )?;
+        let times: Vec<TimeOfDay> =
+            serde_json::from_value(recurring.get("times").cloned().unwrap_or_default())?;
         let days: Option<DayFilter> = recurring
             .get("days")
             .filter(|v| !v.is_null())
@@ -212,9 +210,9 @@ pub fn deserialize_trigger_compat(json: &str) -> Result<TriggerSpec> {
     }
 
     if let Some(interval) = legacy.get("Interval") {
-        let every = interval.get("every").ok_or_else(|| {
-            anyhow::anyhow!("legacy Interval missing 'every' field")
-        })?;
+        let every = interval
+            .get("every")
+            .ok_or_else(|| anyhow::anyhow!("legacy Interval missing 'every' field"))?;
         let secs = every
             .get("secs")
             .and_then(|v| v.as_u64())
@@ -282,12 +280,16 @@ mod tests {
     #[test]
     fn rrule_string() {
         let t: TriggerSpec = "weekdays at 9am".parse().unwrap();
-        assert_eq!(t.to_rrule_string(), "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+        assert_eq!(
+            t.to_rrule_string(),
+            "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+        );
     }
 
     #[test]
     fn legacy_recurring_compat() {
-        let json = r#"{"Recurring":{"times":[{"hour":9,"minute":0}],"days":"Weekdays","timezone":null}}"#;
+        let json =
+            r#"{"Recurring":{"times":[{"hour":9,"minute":0}],"days":"Weekdays","timezone":null}}"#;
         let t = deserialize_trigger_compat(json).unwrap();
         assert_eq!(t.times_of_day()[0].hour, 9);
         assert!(t.days_of_week().is_some());
