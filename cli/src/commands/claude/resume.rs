@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use vigil_registry::Store;
 
 pub async fn handle(run_id: &str, store: &Store) -> Result<()> {

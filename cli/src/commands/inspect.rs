@@ -23,10 +23,7 @@ pub async fn handle(name_or_id: &str, store: &Store) -> Result<()> {
     if let Some(dir) = &task.working_directory {
         println!("Directory:  {}", dir.display());
     }
-    println!(
-        "Enabled:    {}",
-        if task.enabled { "yes" } else { "no" }
-    );
+    println!("Enabled:    {}", if task.enabled { "yes" } else { "no" });
     println!(
         "Created:    {}",
         task.created_at.format("%Y-%m-%d %H:%M:%S")
@@ -62,8 +59,8 @@ pub async fn handle(name_or_id: &str, store: &Store) -> Result<()> {
     } else {
         println!("Recent runs ({}):", runs.len());
         println!(
-            "{:<10} {:<10} {:<21} {:<10} {}",
-            "RUN ID", "STATUS", "STARTED", "DURATION", "EXIT"
+            "{:<10} {:<10} {:<21} {:<10} EXIT",
+            "RUN ID", "STATUS", "STARTED", "DURATION"
         );
         println!("{}", "\u{2500}".repeat(61));
 
@@ -86,7 +83,10 @@ pub async fn handle(name_or_id: &str, store: &Store) -> Result<()> {
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "-".to_string());
 
-            println!("{:<10} {:<10} {:<21} {:<10} {}", id_str, status, started, duration, exit);
+            println!(
+                "{:<10} {:<10} {:<21} {:<10} {}",
+                id_str, status, started, duration, exit
+            );
         }
     }
 

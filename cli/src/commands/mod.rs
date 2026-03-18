@@ -141,7 +141,11 @@ pub enum ClaudeCommand {
 pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
     match cli.command {
         Command::Register { executor } => register::handle(executor, &store).await,
-        Command::Run { name, quiet, dry_run } => run::handle(&name, quiet, dry_run, &store).await,
+        Command::Run {
+            name,
+            quiet,
+            dry_run,
+        } => run::handle(&name, quiet, dry_run, &store).await,
         Command::List => list::handle(&store).await,
         Command::Unregister { name } => unregister::handle(&name, &store).await,
         Command::Schedule { name, trigger } => schedule::handle(&name, &trigger, &store).await,
@@ -153,6 +157,10 @@ pub async fn dispatch(cli: Cli, store: Store) -> Result<()> {
         Command::Resume { run_id } => claude::resume::handle(&run_id, &store).await,
         Command::Inspect { name_or_id } => inspect::handle(&name_or_id, &store).await,
         Command::Show { run_id, raw } => show::handle(&run_id, raw, &store).await,
-        Command::Runs { name, limit, verbose } => runs::handle(name.as_deref(), limit, verbose, &store).await,
+        Command::Runs {
+            name,
+            limit,
+            verbose,
+        } => runs::handle(name.as_deref(), limit, verbose, &store).await,
     }
 }

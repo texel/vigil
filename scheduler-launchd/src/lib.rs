@@ -61,9 +61,9 @@ fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<
         let times = trigger.times_of_day();
         let days = trigger.days_of_week();
 
-        let weekdays: Option<Vec<u8>> = days.as_ref().map(|d| {
-            d.iter().map(launchd_weekday).collect()
-        });
+        let weekdays: Option<Vec<u8>> = days
+            .as_ref()
+            .map(|d| d.iter().map(launchd_weekday).collect());
 
         let mut intervals = Vec::new();
         for time in times {
@@ -311,10 +311,7 @@ mod tests {
     fn plist_is_valid_xml() {
         let trigger = recurring(
             vec![TimeOfDay { hour: 9, minute: 0 }],
-            Some(DayFilter::Days(vec![
-                DayOfWeek::Monday,
-                DayOfWeek::Friday,
-            ])),
+            Some(DayFilter::Days(vec![DayOfWeek::Monday, DayOfWeek::Friday])),
         );
         let xml = generate_plist("xml-test", &trigger, "/usr/local/bin/vigil").unwrap();
         // Should parse back successfully

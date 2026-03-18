@@ -1,11 +1,11 @@
-use vigil_core::models::{RawTask, Run, ScheduledTask};
-use vigil_schedule::TriggerSpec;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use libsql::{params, Connection, Database};
+use libsql::{Connection, Database, params};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use vigil_core::models::{RawTask, Run, ScheduledTask};
+use vigil_schedule::TriggerSpec;
 
 pub struct Store {
     db: Database,
@@ -190,7 +190,11 @@ impl Store {
         Ok(())
     }
 
-    pub async fn list_recent_runs(&self, task_name: Option<&str>, limit: u32) -> Result<Vec<(Run, String)>> {
+    pub async fn list_recent_runs(
+        &self,
+        task_name: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<(Run, String)>> {
         let conn = self.conn().await?;
         let mut rows = match task_name {
             Some(name) => conn.query(
@@ -250,7 +254,10 @@ impl Store {
         }
     }
 
-    pub async fn get_task_by_id_prefix(&self, prefix: &str) -> Result<Option<ScheduledTask<RawTask>>> {
+    pub async fn get_task_by_id_prefix(
+        &self,
+        prefix: &str,
+    ) -> Result<Option<ScheduledTask<RawTask>>> {
         let conn = self.conn().await?;
         let mut rows = conn
             .query(
@@ -267,7 +274,9 @@ impl Store {
         };
 
         if rows.next().await?.is_some() {
-            bail!("ambiguous task ID prefix '{prefix}' — matches multiple tasks, use more characters");
+            bail!(
+                "ambiguous task ID prefix '{prefix}' — matches multiple tasks, use more characters"
+            );
         }
 
         Ok(Some(first))
@@ -290,7 +299,9 @@ impl Store {
         };
 
         if rows.next().await?.is_some() {
-            bail!("ambiguous run ID prefix '{prefix}' — matches multiple runs, use more characters");
+            bail!(
+                "ambiguous run ID prefix '{prefix}' — matches multiple runs, use more characters"
+            );
         }
 
         Ok(Some(first))

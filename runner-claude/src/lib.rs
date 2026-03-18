@@ -260,7 +260,10 @@ impl Runner for ClaudeRunner {
 
     fn format_event(&self, event: &RunEvent) -> Option<EventDisplay> {
         match event {
-            RunEvent::Output { metadata: Some(json), .. } => {
+            RunEvent::Output {
+                metadata: Some(json),
+                ..
+            } => {
                 let event_type = json.get("type").and_then(|v| v.as_str());
                 match event_type {
                     Some("assistant") => {
