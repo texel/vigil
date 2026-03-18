@@ -234,9 +234,9 @@ mod tests {
     }
 
     fn interval(secs: u64) -> TriggerSpec {
-        let expr = if secs % 3600 == 0 {
+        let expr = if secs.is_multiple_of(3600) {
             format!("every {} hours", secs / 3600)
-        } else if secs % 60 == 0 {
+        } else if secs.is_multiple_of(60) {
             format!("every {} minutes", secs / 60)
         } else {
             format!("every {secs} seconds")

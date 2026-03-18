@@ -54,10 +54,10 @@ pub(crate) fn build_recurring_rrule(times: &[TimeOfDay], days: Option<&DayFilter
 
 /// Build an RRULE string for an interval schedule.
 pub(crate) fn build_interval_rrule(seconds: u64) -> String {
-    if seconds % 3600 == 0 {
+    if seconds.is_multiple_of(3600) {
         let hours = seconds / 3600;
         format!("RRULE:FREQ=HOURLY;INTERVAL={hours}")
-    } else if seconds % 60 == 0 {
+    } else if seconds.is_multiple_of(60) {
         let mins = seconds / 60;
         format!("RRULE:FREQ=MINUTELY;INTERVAL={mins}")
     } else {
