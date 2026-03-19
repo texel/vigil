@@ -116,6 +116,56 @@ fn generate_plist(name: &str, trigger: &TriggerSpec, vigil_bin: &str) -> Result<
     Ok(String::from_utf8(buf)?)
 }
 
+/// Check if a path is inside a cargo build artifact directory.
+fn is_build_artifact(path: &std::path::Path) -> bool {
+    path.components().any(|c| c.as_os_str() == "target")
+        && path
+            .components()
+            .any(|c| c.as_os_str() == "debug" || c.as_os_str() == "release")
+}
+
+/// Resolve the vigil binary path for use in scheduled tasks.
+///
+/// If `current_exe` is a cargo build artifact (lives under target/debug or target/release),
+/// attempts to find a stable installed binary via `which vigil`. Falls back to `current_exe`
+/// with a warning if no installed binary is found.
+fn resolve_vigil_bin(current_exe: &std::path::Path) -> PathBuf {
+    if !is_build_artifact(current_exe) {
+        return current_exe.to_path_buf();
+    }
+
+    match std::process::Command::new("which")
+        .arg("vigil")
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let which_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let which_path = PathBuf::from(&which_path);
+            // Don't use the which result if it also points to a build artifact
+            if is_build_artifact(&which_path) {
+                tracing::warn!(
+                    "current binary is a build artifact ({}) and no stable installed vigil found on PATH — scheduled task may break if this binary is removed",
+                    current_exe.display()
+                );
+                return current_exe.to_path_buf();
+            }
+            tracing::warn!(
+                "current binary is a build artifact ({}), using installed binary at {} for scheduled task",
+                current_exe.display(),
+                which_path.display()
+            );
+            which_path
+        }
+        _ => {
+            tracing::warn!(
+                "current binary is a build artifact ({}) and no installed vigil found on PATH — scheduled task may break if this binary is removed",
+                current_exe.display()
+            );
+            current_exe.to_path_buf()
+        }
+    }
+}
+
 pub struct LaunchdScheduler {
     vigil_bin: PathBuf,
     agents_dir: PathBuf,
@@ -123,7 +173,8 @@ pub struct LaunchdScheduler {
 
 impl LaunchdScheduler {
     pub fn new() -> Result<Self> {
-        let vigil_bin = std::env::current_exe().context("failed to get vigil binary path")?;
+        let current_exe = std::env::current_exe().context("failed to get vigil binary path")?;
+        let vigil_bin = resolve_vigil_bin(&current_exe);
         let home = std::env::var("HOME").context("HOME not set")?;
         let agents_dir = PathBuf::from(home).join("Library/LaunchAgents");
         Ok(Self {
@@ -305,6 +356,26 @@ mod tests {
         let plist = generate_plist("test", &trigger, "/usr/local/bin/vigil").unwrap();
         assert!(plist.contains("<key>EnvironmentVariables</key>"));
         assert!(plist.contains("<key>PATH</key>"));
+    }
+
+    #[test]
+    fn resolve_bin_prefers_stable_over_debug() {
+        let debug_path = PathBuf::from("/Users/dev/project/target/debug/vigil");
+        assert!(is_build_artifact(&debug_path));
+    }
+
+    #[test]
+    fn resolve_bin_detects_release_artifact() {
+        let release_path = PathBuf::from("/Users/dev/project/target/release/vigil");
+        assert!(is_build_artifact(&release_path));
+    }
+
+    #[test]
+    fn resolve_bin_accepts_installed_path() {
+        let installed = PathBuf::from("/Users/dev/.cargo/bin/vigil");
+        assert!(!is_build_artifact(&installed));
+        // Should return the same path unchanged
+        assert_eq!(resolve_vigil_bin(&installed), installed);
     }
 
     #[test]
