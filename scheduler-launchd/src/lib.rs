@@ -134,10 +134,7 @@ fn resolve_vigil_bin(current_exe: &std::path::Path) -> PathBuf {
         return current_exe.to_path_buf();
     }
 
-    match std::process::Command::new("which")
-        .arg("vigil")
-        .output()
-    {
+    match std::process::Command::new("which").arg("vigil").output() {
         Ok(output) if output.status.success() => {
             let which_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let which_path = PathBuf::from(&which_path);
