@@ -12,7 +12,7 @@ jobs:
     name: Test (${{ matrix.os }})
     strategy:
       matrix:
-        os: [depot-ubuntu-24.04, depot-macos-latest]
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
     name: Clippy (${{ matrix.os }})
     strategy:
       matrix:
-        os: [depot-ubuntu-24.04, depot-macos-latest]
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
 
   fmt:
     name: Format
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
